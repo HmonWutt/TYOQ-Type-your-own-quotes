@@ -1,7 +1,19 @@
 import curses
 import time
-from curses import color_pair, wrapper
-def main(stdscr):
+from curses import color_pair, wrapper,textpad
+text = '''The marmalade manufacturer discovered seventeen identical umbrellas
+    beneath the railway station,'''
+_='''each one precisely folded into a cube shape that 
+    defied conventional geometry. Meanwhile, a retired accountant in Oslo was 
+    simultaneously cataloging the migratory patterns of refrigerators—a pursuit 
+    that had consumed the last four decades of his life with inexplicable passion. 
+    The graffiti artist's masterpiece, rendered entirely in lowercase helvetica, 
+    proclaimed that "socks dream of Antarctica," a statement that confused the city 
+    council but resonated deeply with pigeons. Above it all, the automated espresso 
+    machine at platform 3B continued its endless cycle of dispensing beverages to 
+    passengers who existed only in theoretical discussions, their names preserved 
+    in spreadsheets that nobody had opened since 2019.'''
+def main(stdscr,text):
 
     RED =1 
     GREEN = 2
@@ -30,18 +42,7 @@ def main(stdscr):
     
     win = curses.newwin(height,width-10,y+7,5)
     #text = "This is the text to type."
-    text = '''The marmalade manufacturer discovered seventeen identical umbrellas
-    beneath the railway station,'''
-    _='''each one precisely folded into a cube shape that 
-    defied conventional geometry. Meanwhile, a retired accountant in Oslo was 
-    simultaneously cataloging the migratory patterns of refrigerators—a pursuit 
-    that had consumed the last four decades of his life with inexplicable passion. 
-    The graffiti artist's masterpiece, rendered entirely in lowercase helvetica, 
-    proclaimed that "socks dream of Antarctica," a statement that confused the city 
-    council but resonated deeply with pigeons. Above it all, the automated espresso 
-    machine at platform 3B continued its endless cycle of dispensing beverages to 
-    passengers who existed only in theoretical discussions, their names preserved 
-    in spreadsheets that nobody had opened since 2019.'''
+ 
     text_split  = text.split()
     text = ' '.join(text_split)
     typed = ""
@@ -140,5 +141,28 @@ def main(stdscr):
     stdscr.nodelay(False)
     while ord(c)!=27: 
         c = win.getkey()
-        
-wrapper(main)
+def print_in_green(s,end): 
+    print("\033[92m{}\033[00m".format(s),end=end,sep="",flush=True)
+def print_in_purple(s, end): 
+    print("\033[94m{}\033[00m".format(s),end=end,sep="",flush=True)
+def get_input():
+    instruction = "Paste your text here"
+    length = len(instruction)+4
+    h_line = "+"+"-"* length+"+"
+    v_line = "|"+ " "*length +"|"
+    v_line_mid = "|  "+instruction+"  |"
+    formatted_instruction = h_line+"\n"+v_line+"\n"+v_line_mid+"\n"+v_line+"\n"+h_line
+    print_in_green(formatted_instruction,"\n")
+
+    inpt = input()
+    
+    print_dots()
+    return inpt
+def print_dots():
+    count = 4
+    print_in_green("Input saved. Redirecting to the typing arena ","")
+    for _ in range(count):
+        print_in_green("➤","")
+        time.sleep(0.5)
+text = get_input()
+wrapper(main,text)
