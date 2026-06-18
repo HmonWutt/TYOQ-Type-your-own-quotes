@@ -1,12 +1,20 @@
 import curses
-from curses import wrapper
+import time
+from curses import color_pair, wrapper
 def main(stdscr):
 
     RED =1 
     GREEN = 2
+    YELLOW = 3
+    BLUE = 4
+    MAGNETA = 5
+    BLACK = curses.COLOR_BLACK
     UNDERLINE = curses.A_UNDERLINE
-    curses.init_pair(RED, curses.COLOR_RED, curses.COLOR_BLACK)
-    curses.init_pair(GREEN, curses.COLOR_GREEN, curses.COLOR_BLACK)
+    curses.init_pair(RED, curses.COLOR_RED, BLACK)
+    curses.init_pair(GREEN, curses.COLOR_GREEN, BLACK)
+    curses.init_pair(YELLOW, curses.COLOR_YELLOW, BLACK)
+    curses.init_pair(BLUE, curses.COLOR_BLUE, BLACK)
+    curses.init_pair(MAGNETA, curses.COLOR_MAGENTA, BLACK)
 
     c = ""
     header = "Let's see how fast you can type!"
@@ -20,11 +28,11 @@ def main(stdscr):
     stdscr.addstr(y + 2, x, "|" + " " * (text_width) + "|")
     stdscr.addstr(y + 3, x, "+" + "-" * (text_width) + "+")
     
-
-    win = curses.newwin(height,width-10,y+5,5)
+    win = curses.newwin(height,width-10,y+7,5)
     #text = "This is the text to type."
     text = '''The marmalade manufacturer discovered seventeen identical umbrellas
-    beneath the railway station, each one precisely folded into a cube shape that 
+    beneath the railway station,'''
+    _='''each one precisely folded into a cube shape that 
     defied conventional geometry. Meanwhile, a retired accountant in Oslo was 
     simultaneously cataloging the migratory patterns of refrigerators—a pursuit 
     that had consumed the last four decades of his life with inexplicable passion. 
@@ -34,23 +42,30 @@ def main(stdscr):
     machine at platform 3B continued its endless cycle of dispensing beverages to 
     passengers who existed only in theoretical discussions, their names preserved 
     in spreadsheets that nobody had opened since 2019.'''
-    text = ' '.join(text.split())
+    text_split  = text.split()
+    text = ' '.join(text_split)
+    typed = ""
     win.addstr(text)
-
+    continuous_score = curses.newwin(2,10,y+5,5)
+    continuous_score.addstr(f"{len(typed)}/",curses.color_pair(YELLOW))
+    continuous_score.addstr(f"{len(text_split)}")
     stdscr.refresh()
     win.refresh()
+    continuous_score.refresh()
     curses.noecho()
     stdscr.nodelay(True)
     curses.curs_set(0)
-    typed = ""
-    while typed !=text:
+    start = time.time()
+    end = 0
+    correct = 0
+    typed_length = 0
+    while len(typed) !=len(text):
+        correct = 0
         try:
             c = win.getkey()
-            if c == 'q': 
-                break
-            elif c == curses.KEY_BACKSPACE or c == '\x08' or c == '\x7f':
+            if c == curses.KEY_BACKSPACE or c == '\x08' or c == '\x7f':
                 typed = typed[:-1]
-            elif c =="KEY_RESIZE":
+            elif c =="KEY_RESIZE" or c == curses.KEY_RESIZE:
                 height,width= stdscr.getmaxyx()
                 win.resize(height,width-10)
                 stdscr.erase()
@@ -67,23 +82,63 @@ def main(stdscr):
             elif c == curses.KEY_MOUSE:
                 curses.flash()
                 pass
+
+            elif ord(c) == 27: 
+                break
             else:
                 typed = typed+c
             win.erase()
-            limit = len(typed)
-            if limit == len(text):
-                break
-            for i in range(limit):
+            typed_length = len(typed)
+            for i in range(typed_length):
                 if typed[i] == text[i]:
-                    win.addstr(typed[i], curses.color_pair(GREEN))
+                    correct+=1
+                    win.addstr(text[i], curses.color_pair(GREEN))
                 else:
-                    win.addstr(typed[i],curses.color_pair(RED))
-            if limit<len(text):
-                win.addstr(text[limit], UNDERLINE)
-                win.addstr(text[limit+1:])
-            win.refresh()
+                    win.addstr(text[i],curses.color_pair(RED))
 
-        except curses.error:
+            if typed_length<len(text):
+                win.addstr(text[typed_length], UNDERLINE)
+                if typed_length < len(text)-1:
+                    win.addstr(text[typed_length+1:])
+            else:
+                end = time.time()
+            win.refresh() 
+            words_typed = typed.count(" ")
+            continuous_score.erase()
+            continuous_score.addstr(f"{words_typed}/",curses.color_pair(YELLOW))
+            continuous_score.addstr(f"{len(text_split)}")
+            continuous_score.refresh()
+
+        except Exception as e:
+            stdscr.addstr(str(e))          
+            stdscr.refresh()
             pass
-
+    if not len(typed) == len(text):
+        return
+    accuracy = (correct/typed_length)*100
+    time_taken = end - start
+    speed_character = (typed_length/time_taken)*60
+    speed_word = (len(text)/5/time_taken)*60
+    win.clear()
+    stdscr.clear()
+    header = ("(⌐■_■) These are your results")    
+    height,width= stdscr.getmaxyx()
+    text_width = len(header) + 4
+    x = (width - text_width) // 2
+    y = 2
+    stdscr.addstr(y - 1, x, "+" + "-" * (text_width) + "+")
+    stdscr.addstr(y, x, "|" + " " * (text_width) + "|")
+    stdscr.addstr(y + 1, x, "|  " + header + "  |")
+    stdscr.addstr(y + 2, x, "|" + " " * (text_width) + "|")
+    stdscr.addstr(y + 3, x, "+" + "-" * (text_width) + "+")
+    win.addstr(f"Speed: {round(speed_word)} wpm\n", curses.color_pair(BLUE))
+    win.addstr(f"Speed: {round(speed_character)} cpm\n",curses.color_pair(MAGNETA))
+    win.addstr(f"accuracy: {round(accuracy)} %",curses.color_pair(YELLOW))
+    win.addstr("\nPress ESC key to exit the programme.", color_pair(RED))
+    stdscr.refresh()
+    win.refresh()
+    stdscr.nodelay(False)
+    while ord(c)!=27: 
+        c = win.getkey()
+        
 wrapper(main)
