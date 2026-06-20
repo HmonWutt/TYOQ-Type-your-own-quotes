@@ -17,7 +17,12 @@ That's it. Simple stuff. Built in ~200 lines in python using `curses` library.
 Use `python3 main.py` to practice with a few hard-coded quotes.
 Use `python3 main.py -i` to paste your own quotes in.
 
-## Coming soon
+## What I'm working on
 
--Option to save your quotes to a file
--Maybe different themes
+- Webscraping Goodread quotes
+
+## New features coming soon
+
+- Choose quotes using author name, category etc 
+- Option to save your quotes to a file
+- Maybe different themes

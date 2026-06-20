@@ -36,10 +36,9 @@ def main(stdscr,text):
  
     text_split  = text.split()
     text = ' '.join(text_split)
-    typed = ""
     win.addstr(text)
     continuous_score = curses.newwin(2,10,y+5,5)
-    continuous_score.addstr(f"{len(typed)}/",curses.color_pair(YELLOW))
+    continuous_score.addstr(f"0/",curses.color_pair(YELLOW))
     continuous_score.addstr(f"{len(text_split)}")
     stdscr.refresh()
     win.refresh()
@@ -49,15 +48,19 @@ def main(stdscr,text):
     curses.curs_set(0)
     start = time.time()
     end = 0
-    correct = 0
-    typed_length = 0
-
-    while len(typed) !=len(text):
-        correct = 0
+    error_indxs = []
+    indx  = -1
+    while indx !=len(text)-1:
         try:
             c = win.getkey()
             if c == curses.KEY_BACKSPACE or c == '\x08' or c == '\x7f':
-                typed = typed[:-1]
+                if error_indxs:
+                    last_error_index = error_indxs[-1]
+                    if indx == last_error_index:
+                        error_indxs.pop()
+
+                if indx >-1:
+                    indx-=1
             elif c =="KEY_RESIZE" or c == curses.KEY_RESIZE:
                 height,width= stdscr.getmaxyx()
                 win.resize(height,width-10)
@@ -78,25 +81,27 @@ def main(stdscr,text):
 
             elif ord(c) == 27: 
                 return "done"
+            elif c == text[indx+1]:
+                indx +=1
             else:
-                typed = typed+c
+                indx +=1
+                error_indxs.append(indx)
+
             win.erase()
-            typed_length = len(typed)
-            for i in range(typed_length):
-                if typed[i] == text[i]:
-                    correct+=1
+            for i in range(indx+1):
+                if i not in error_indxs:
                     win.addstr(text[i], curses.color_pair(GREEN))
                 else:
                     win.addstr(text[i],curses.color_pair(RED))
 
-            if typed_length<len(text):
-                win.addstr(text[typed_length], UNDERLINE)
-                if typed_length < len(text)-1:
-                    win.addstr(text[typed_length+1:])
+            if indx < len(text)-1:
+                win.addstr(text[indx+1], UNDERLINE)
+                if indx < len(text)-2:
+                    win.addstr(text[indx+2:])
             else:
                 end = time.time()
             win.refresh() 
-            words_typed = typed.count(" ")
+            words_typed = text[:indx+1].count(" ")
             continuous_score.erase()
             continuous_score.addstr(f"{words_typed}/",curses.color_pair(YELLOW))
             continuous_score.addstr(f"{len(text_split)}")
@@ -106,12 +111,15 @@ def main(stdscr,text):
             stdscr.addstr(str(e))          
             stdscr.refresh()
             pass
-    if not len(typed) == len(text):
+    if indx < len(text)-1:
         return
-    accuracy = (correct/typed_length)*100
+    total = len(text)
+    errors = len(error_indxs)
+    correct = total - errors
+    accuracy = (correct/total)*100
     time_taken = end - start
-    speed_character = (typed_length/time_taken)*60
-    speed_word = (len(text)/5/time_taken)*60
+    speed_character = (total/time_taken)*60
+    speed_word = (total/5/time_taken)*60
     win.clear()
     stdscr.clear()
     header = ("(⌐■_■) These are your results")    
@@ -188,16 +196,18 @@ is the same crowd that will applaud your beheading.
 """
 ipt = ""
 quotes = [quote1,quote2,quote3,quote4]
-if len(sys.argv)<2:
-    while True:
-        pick = random.randint(0,len(quotes)-1)
-        text = quotes[pick]
-        ipt = wrapper(main,text)
-        if ipt == "done":
-            break
-else:
-    while True:
-        text = get_input()
-        ipt =wrapper(main,text)
-        if ipt=="done":
-            break
+if __name__ == '__main__':
+    if len(sys.argv)<2:
+        while True:
+            pick = random.randint(0,len(quotes)-1)
+            text = quotes[pick]
+            ipt = wrapper(main,text)
+            if ipt == "done":
+                break
+    else:
+        while True:
+            text = get_input()
+            ipt =wrapper(main,text)
+            if ipt=="done":
+                break
+
