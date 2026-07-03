@@ -30,16 +30,23 @@ func Scrape(url string) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	doc.Find(".quoteText").Each(func(i int, s *goquery.Selection) {
-		s.Find(".authorOrTitle").Each(func(j int, a *goquery.Selection) {
-			if j == 0 {
-				fmt.Printf("Author: %s\n", a.Text())
-			} else {
-				fmt.Printf("Book: %s\n", a.Text())
-			}
-		})
+	doc.Find(".quoteDetails").Each(func(i int, qd *goquery.Selection) {
+		qd.Find(".quoteText").Each(func(_ int, s *goquery.Selection) {
+			s.Find(".authorOrTitle").Each(func(j int, a *goquery.Selection) {
+				if j == 0 {
+					fmt.Printf("Author: %s\n", strings.TrimSpace(a.Text()))
+				} else {
+					fmt.Printf("Book: %s\n", strings.TrimSpace(a.Text()))
+				}
+			})
 
-		parts := strings.Split(s.Text(), "―")
-		fmt.Printf("Quote: %s\n", parts[0])
+			parts := strings.Split(qd.Text(), "―")
+			fmt.Printf("Quote: %s\n", strings.TrimSpace(parts[0]))
+		})
+		fmt.Printf("Tags: ")
+		qd.Find(".quoteFooter").Find(".left").Find("a").Each(func(_ int, t *goquery.Selection) {
+			fmt.Printf("%s, ", t.Text())
+		})
+		fmt.Println("\n-----------------------------------")
 	})
 }
