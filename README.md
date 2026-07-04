@@ -19,7 +19,8 @@ Use `python3 main.py -i` to paste your own quotes in.
 
 ## What I'm working on
 
-- Webscraping Goodread quotes
+- Webscraping Goodread quotes ✅
+- REST API for quotes 
 
 ## New features coming soon
 
