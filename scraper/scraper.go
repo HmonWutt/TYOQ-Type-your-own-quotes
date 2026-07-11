@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/PuerkitoBio/goquery"
 )
@@ -55,6 +56,7 @@ func ScrapeAllPagesAndWriteToFile(baseURL string, path string) {
 		URL := baseURL + query
 		quotes := Scrape(URL)
 		allQuotes = append(allQuotes, quotes...)
+		time.Sleep(1 * time.Second)
 	}
 	write(path, allQuotes)
 }
@@ -79,7 +81,10 @@ func MakeQuotes(doc *goquery.Document) []Quote {
 
 			parts := strings.Split(qd.Text(), "―")
 			quoteText := strings.TrimSpace(parts[0])
-			quoteText = strings.Trim(quoteText, `"`)
+			quoteText = strings.Trim(quoteText, "\u201C\u201D")
+			// for _, r := range quoteText {
+			// 	fmt.Printf("%U %c\n", r, r)
+			// }
 			fmt.Printf("Quote: %s\n", quoteText)
 			quote.Text = quoteText
 		})
@@ -98,8 +103,15 @@ func MakeQuotes(doc *goquery.Document) []Quote {
 }
 
 func write(filepath string, quotes []Quote) {
-	data, err := json.MarshalIndent(quotes, "", " ")
-	Check(err)
-	err = os.WriteFile("quotes.txt", data, 0o644)
-	Check(err)
+	file, _ := os.Create(filepath)
+	defer file.Close()
+
+	encoder := json.NewEncoder(file)
+	for _, quote := range quotes {
+		err := encoder.Encode(quote)
+		if err != nil {
+			log.Println("failed to write to file")
+		}
+	}
+	log.Printf("✓ Saved %d quotes\n", len(quotes))
 }

@@ -13,6 +13,6 @@ func main() {
 
 	cwd, err := os.Getwd()
 	scraper.Check(err)
-	p := filepath.Join(cwd, "quotes.txt")
+	p := filepath.Join(cwd, "quotes.jsonl")
 	scraper.ScrapeAllPagesAndWriteToFile("https://www.goodreads.com/quotes", p)
 }
