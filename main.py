@@ -10,14 +10,14 @@ def main(stdscr,text):
     GREEN = 2
     YELLOW = 3
     BLUE = 4
-    MAGNETA = 5
+    MAGENTA = 5
     BLACK = curses.COLOR_BLACK
     UNDERLINE = curses.A_UNDERLINE
     curses.init_pair(RED, curses.COLOR_RED, BLACK)
     curses.init_pair(GREEN, curses.COLOR_GREEN, BLACK)
     curses.init_pair(YELLOW, curses.COLOR_YELLOW, BLACK)
     curses.init_pair(BLUE, curses.COLOR_BLUE, BLACK)
-    curses.init_pair(MAGNETA, curses.COLOR_MAGENTA, BLACK)
+    curses.init_pair(MAGENTA, curses.COLOR_MAGENTA, BLACK)
 
     c = ""
     header = "Let's see how fast you can type!"
@@ -133,7 +133,7 @@ def main(stdscr,text):
     stdscr.addstr(y + 2, x, "|" + " " * (text_width) + "|")
     stdscr.addstr(y + 3, x, "+" + "-" * (text_width) + "+")
     win.addstr(f"Speed: {round(speed_word)} wpm\n", curses.color_pair(BLUE))
-    win.addstr(f"Speed: {round(speed_character)} cpm\n",curses.color_pair(MAGNETA))
+    win.addstr(f"Speed: {round(speed_character)} cpm\n",curses.color_pair(MAGENTA))
     win.addstr(f"accuracy: {round(accuracy)} %",curses.color_pair(YELLOW))
     win.addstr("\nPress ESC key to exit the programme. Press any other key to type again", color_pair(RED))
     stdscr.refresh()
@@ -188,11 +188,6 @@ on fire, and he'll be warm for the rest of his life.
 quote4 = """
 It is said that your life flashes before your eyes just 
 before you die. That is true, it's called Living.
-"""
-
-quote5 = """
-Always remember that the crowd that applauds your coronation 
-is the same crowd that will applaud your beheading.
 """
 ipt = ""
 quotes = [quote1,quote2,quote3,quote4]
