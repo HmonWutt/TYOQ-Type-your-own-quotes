@@ -9,7 +9,10 @@ import (
 
 func main() {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/quotes", func(w http.ResponseWriter, r *http.Request) { http.ServeFile(w, r, "../quotes.txt") })
+	mux.HandleFunc("/quotes", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/x-ndjson")
+		http.ServeFile(w, r, "../quotes.jsonl")
+	})
 	server := &http.Server{
 		Addr:           ":8080",
 		Handler:        mux,
