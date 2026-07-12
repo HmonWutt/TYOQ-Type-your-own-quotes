@@ -1,29 +1,164 @@
-# TYOQ - Type your own quotes
+# TYOQ — Type Your Own Quotes
 
-A CLI typing practice tool inspired by MonkeyType. I wanted a simple tool where I can type quotes I like.
+![Go 1.26.4](https://img.shields.io/badge/Go-1.26.4+-00ADD8?logo=go&logoColor=white)
+![Python 3.6+](https://img.shields.io/badge/Python-3.6+-3776AB?logo=python&logoColor=white)
+![License](https://img.shields.io/badge/license-none-lightgrey)
 
-## What it does
+> A MonkeyType-inspired typing-practice CLI, plus a Goodreads quote scraper
+> and a small REST API — all in one repo.
 
-- Paste in any quote you like
-- See your WPM and accuracy
+## Overview
 
-That's it. Simple stuff. Built in ~200 lines in python using `curses` library.
+TYOQ started as a Python `curses` typing-practice tool and grew into a
+three-component pipeline: a Go scraper pulls quotes from Goodreads, writes them
+to a JSONL file, and a Go HTTP server exposes them over a REST endpoint. The
+typing CLI still uses its own hardcoded quotes today; the goal is to wire it to
+the API so you can type any quote on demand.
 
-# Requirement
+```
+goodreads.com/quotes ─▶ (scraper, Go) ─▶ quotes.jsonl ─▶ (API, Go) ─▶ :8080/quotes
+                                                                         │
+                                                      (typing CLI, Python) ─┘
+                                                       [wired in — future]
+```
 
-- python3.6+
-- `pip install windows-curses` if you are on Windows
+## Features
 
-Use `python3 main.py` to practice with a few hard-coded quotes.
-Use `python3 main.py -i` to paste your own quotes in.
+### Typing CLI (`main.py`, Python)
+- Live word counter that updates as you type
+- WPM, CPM, and accuracy shown on a results screen after completion
+- Error highlighting in red, correct characters in green, next char underlined
+- Backspace to undo the last keystroke
+- Random hardcoded quotes, or paste your own text
+- ESC to quit; any other key on the results screen starts a new round
 
-## What I'm working on
+### Scraper (`scraper/scraper.go` + `main.go`, Go)
+- Scrapes 100 pages from `https://www.goodreads.com/quotes` — 3,000 quotes
+- Parses HTML with [goquery](https://github.com/PuerkitoBio/goquery)
+- 1-second sleep between page fetches (politeness)
+- Writes one JSON object per line (JSONL) to `quotes.jsonl`
 
-- Webscraping Goodread quotes ✅
-- REST API for quotes 
+### API (`api/main.go`, Go)
+- `GET /quotes` on port `:8080`
+- Streams the scraped dataset as NDJSON (one JSON object per line)
+- Read/Write timeouts of 10s, 1 MB max header bytes
 
-## New features coming soon
+## Repo structure
 
-- Choose quotes using author name, category etc 
-- Option to save your quotes to a file
-- Maybe different themes
+```
+.
+├── README.md            this file
+├── .gitignore           ignores the local `crawler` build artifact
+├── main.py              typing-practice CLI (curses TUI)
+├── main.go              scraper entrypoint — runs scraper.ScrapeAllPagesAndWriteToFile
+├── go.mod               module github.com/HmonWutt/TYOQ-Type-your-own-quotes
+├── go.sum               checksums for goquery + transitive deps
+├── quotes.jsonl         3,000 scraped quotes, JSONL (current scraper output)
+├── quotes.txt           legacy pretty-printed JSON array of the same 3,000 quotes
+├── scraper/
+│   └── scraper.go       Goodreads scraper (Scrape, ScrapeAllPagesAndWriteToFile, MakeQuotes)
+└── api/
+    └── main.go          HTTP server on :8080 serving GET /quotes
+```
+
+## Requirements
+
+- **Python 3.6+** (uses f-strings). On Windows, also `pip install windows-curses`.
+- **Go 1.26.4+** toolchain (as declared in `go.mod`).
+
+## Usage
+
+### Typing practice (Python)
+
+```bash
+python3 main.py        # random hardcoded quote
+python3 main.py -i     # paste your own text instead
+```
+
+`-i` is the conventional flag documented here; the code actually enables input
+mode whenever *any* argument is passed, so `python3 main.py anything` works too.
+
+**Controls during typing:**
+- Type the quote; correct chars turn green, wrong ones turn red
+- Backspace deletes the last keystroke
+- ESC at any time quits the program
+- On the results screen: ESC to quit, any other key for a new round
+
+**Stats shown after completion:** WPM, CPM, accuracy %, plus "speed in characters
+per minute" using the standard 5-chars-per-word formula. Note: the paste-input
+mode uses Python's `input()`, which reads a single line — multi-line pastes are
+truncated to the first line.
+
+### Scrape quotes (Go)
+
+```bash
+go run .                # writes ./quotes.jsonl (~100s, 3,000 quotes)
+```
+
+The scraper prints verbose per-quote progress to stdout (author, book, quote,
+tags for each). Output is written to `<cwd>/quotes.jsonl`. Note: the Goodreads
+selectors (`.quoteDetails`, `.quoteText`, `.authorOrTitle`, `.quoteFooter .left`)
+are site-specific; if Goodreads changes its markup the scraper will need
+updating.
+
+### Run the API (Go)
+
+```bash
+cd api && go run main.go
+curl http://localhost:8080/quotes        # -> NDJSON stream
+```
+
+The server must be launched from `api/` because it serves `../quotes.jsonl`
+(a path relative to the working directory).
+
+## Data format
+
+`quotes.jsonl` is [JSON Lines](https://jsonlines.org) / [NDJSON](https://ndjson.org)
+— one compact JSON object per line. Each quote has this schema:
+
+| Field    | Type             | Notes                                   |
+|----------|------------------|-----------------------------------------|
+| `text`   | string           | the quote body                           |
+| `author` | string           | e.g. `"Oscar Wilde"`                    |
+| `source` | string           | book/work title, often `""`              |
+| `tags`   | array of strings | quote tags, or `null` when none present |
+
+Sample (first and third lines of `quotes.jsonl`):
+
+```jsonl
+{"text":"Be yourself; everyone else is already taken.","author":"Oscar Wilde","source":"","tags":null}
+{"text":"So many books, so little time.","author":"Frank Zappa","source":"","tags":["books","humor"]}
+```
+
+`quotes.txt` is a legacy pretty-printed JSON array of the same 3,000 quotes
+(pre-cleanup, with curly quotation marks preserved). It is kept for reference
+but is not regenerated by the current scraper.
+
+## Roadmap
+
+- [x] Webscraping Goodreads quotes
+- [x] REST API — full-dataset endpoint (`GET /quotes`)
+- [ ] Filter quotes by author / category / tag
+- [ ] Random selection + pagination endpoints
+- [ ] Wire the typing CLI to fetch from the API instead of hardcoded quotes
+- [ ] Save typing scores to a file
+- [ ] Different themes for the CLI
+
+## Contributing
+
+PRs welcome. There are no automated tests yet — to verify a change, run the
+three components manually as described in [Usage](#usage):
+
+1. `python3 main.py` — confirm the typing loop, results screen, and retry work
+2. `go run .` — confirm `quotes.jsonl` is regenerated without errors
+3. `cd api && go run main.go` then `curl http://localhost:8080/quotes` — confirm
+   the NDJSON stream
+
+Keep commits scoped and follow the existing
+[conventional-commit](https://www.conventionalcommits.org/) style
+(`feat:`, `fix:`, `refactor:`, `docs:`).
+
+## License
+
+No license file is present in this repository yet. All rights are reserved by
+the author until one is added.
