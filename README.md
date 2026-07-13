@@ -2,7 +2,7 @@
 
 ![Go 1.26.4](https://img.shields.io/badge/Go-1.26.4+-00ADD8?logo=go&logoColor=white)
 ![Python 3.6+](https://img.shields.io/badge/Python-3.6+-3776AB?logo=python&logoColor=white)
-![License](https://img.shields.io/badge/license-none-lightgrey)
+![License: MIT](https://img.shields.io/badge/license-MIT-green)
 
 > A MonkeyType-inspired typing-practice CLI, plus a Goodreads quote scraper
 > and a small REST API — all in one repo.
@@ -42,24 +42,6 @@ goodreads.com/quotes ─▶ (scraper, Go) ─▶ quotes.jsonl ─▶ (API, Go) �
 - `GET /quotes` on port `:8080`
 - Streams the scraped dataset as NDJSON (one JSON object per line)
 - Read/Write timeouts of 10s, 1 MB max header bytes
-
-## Repo structure
-
-```
-.
-├── README.md            this file
-├── .gitignore           ignores the local `crawler` build artifact
-├── main.py              typing-practice CLI (curses TUI)
-├── main.go              scraper entrypoint — runs scraper.ScrapeAllPagesAndWriteToFile
-├── go.mod               module github.com/HmonWutt/TYOQ-Type-your-own-quotes
-├── go.sum               checksums for goquery + transitive deps
-├── quotes.jsonl         3,000 scraped quotes, JSONL (current scraper output)
-├── quotes.txt           legacy pretty-printed JSON array of the same 3,000 quotes
-├── scraper/
-│   └── scraper.go       Goodreads scraper (Scrape, ScrapeAllPagesAndWriteToFile, MakeQuotes)
-└── api/
-    └── main.go          HTTP server on :8080 serving GET /quotes
-```
 
 ## Requirements
 
@@ -160,5 +142,4 @@ Keep commits scoped and follow the existing
 
 ## License
 
-No license file is present in this repository yet. All rights are reserved by
-the author until one is added.
+This project is licensed under the MIT License — see [LICENSE](LICENSE).
