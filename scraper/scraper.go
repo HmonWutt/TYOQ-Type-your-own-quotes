@@ -81,6 +81,7 @@ func MakeQuotes(doc *goquery.Document) []Quote {
 
 			parts := strings.Split(qd.Text(), "―")
 			quoteText := strings.TrimSpace(parts[0])
+			quoteText = strings.ReplaceAll(quoteText, "\n", "")
 			quoteText = strings.Trim(quoteText, "\u201C\u201D")
 			// for _, r := range quoteText {
 			// 	fmt.Printf("%U %c\n", r, r)
