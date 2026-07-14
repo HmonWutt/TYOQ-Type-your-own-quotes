@@ -1,0 +1,40 @@
+package main
+
+import (
+	"net/url"
+	"strings"
+
+	"github.com/PuerkitoBio/goquery"
+)
+
+func normalizeURL(URL string) (string, error) {
+	u, err := url.Parse(URL)
+	if err != nil {
+		return "", err
+	}
+	normPath := u.Host + u.Path
+	return normPath, nil
+}
+
+func getHeadingFromHTML(html string) string {
+	reader := strings.NewReader(html)
+	doc, err := goquery.NewDocumentFromReader(reader)
+	if err != nil {
+		return ""
+	}
+	heading := doc.Find("h1").Text()
+	if heading == "" {
+		heading = doc.Find("h2").Text()
+	}
+	return heading
+}
+
+func getFirstParagraphFromHTML(html string) string {
+	reader := strings.NewReader(html)
+	doc, err := goquery.NewDocumentFromReader(reader)
+	if err != nil {
+		return ""
+	}
+	paragraph := doc.Find("main").Find("p").Text()
+	return paragraph
+}
