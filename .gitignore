@@ -1,2 +1,4 @@
-crawler
-
+__pycache__
+.env
+readme1.md
+03-query.sql
