@@ -1,29 +1,68 @@
-# TYOQ - Type your own quotes
+# TYOQ — Type Your Own Quotes
 
-A CLI typing practice tool inspired by MonkeyType. I wanted a simple tool where I can type quotes I like.
+![Go 1.26.4](https://img.shields.io/badge/Go-1.26.4+-00ADD8?logo=go&logoColor=white)
+![Python 3.6+](https://img.shields.io/badge/Python-3.6+-3776AB?logo=python&logoColor=white)
+![License: MIT](https://img.shields.io/badge/license-MIT-green)
 
-## What it does
+A MonkeyType-inspired typing CLI, a Goodreads quote scraper, and a PostgreSQL
+seed pipeline.
 
-- Paste in any quote you like
-- See your WPM and accuracy
+## Usage
 
-That's it. Simple stuff. Built in ~200 lines in python using `curses` library.
+### Typing practice (Python)
+```bash
+python3 main.py        # random hardcoded quote
+python3 main.py -i     # paste your own text
+```
 
-# Requirement
+### Scrape quotes (Go)
+```bash
+go run ./cmd/scraper/   # writes quotes.jsonl (~3,000 quotes)
+```
 
-- python3.6+
-- `pip install windows-curses` if you are on Windows
+### Generate database seed (Go)
+```bash
+go run ./cmd/genseed/   # reads quotes.jsonl, writes init-db/02_seed.sql
+```
 
-Use `python3 main.py` to practice with a few hard-coded quotes.
-Use `python3 main.py -i` to paste your own quotes in.
+### Database (Docker)
+```bash
+docker compose up -d     # PostgreSQL on localhost:5432
+```
 
-## What I'm working on
+## Components
 
-- Webscraping Goodread quotes ✅
-- REST API for quotes 
+| Component | Path | Description |
+|----------|------|-------------|
+| Typing CLI | `main.py` | `curses`-based typing practice with WPM/accuracy |
+| Scraper | `internal/scraper/`, `cmd/scraper/` | Scrapes 3,000 Goodreads quotes to JSONL |
+| Seed generator | `internal/genseed/`, `cmd/genseed/` | Generates PostgreSQL seed SQL from JSONL |
+| Database | `docker-compose.yml`, `init-db/` | PostgreSQL 18 with auto-loaded schema + seed |
 
-## New features coming soon
+## Data format
 
-- Choose quotes using author name, category etc 
-- Option to save your quotes to a file
-- Maybe different themes
+`quotes.jsonl` is [JSON Lines](https://jsonlines.org) — one JSON object per line:
+
+```jsonl
+{"text":"Be yourself; everyone else is already taken.","author":"Oscar Wilde","source":"","tags":null}
+{"text":"So many books, so little time.","author":"Frank Zappa","source":"","tags":["books","humor"]}
+```
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `text` | string | the quote body |
+| `author` | string | e.g. `"Oscar Wilde"` |
+| `source` | string | book/work title, often `""` |
+| `tags` | array of strings | quote tags, or `null` |
+
+## Roadmap
+
+- [x] Webscraping Goodreads quotes
+- [x] PostgreSQL database with seed data
+- [ ] Wire the typing CLI to the database
+- [ ] Filter quotes by author / category / tag
+- [ ] Different themes for the CLI
+
+## License
+
+MIT — see [LICENSE](LICENSE).
