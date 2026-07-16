@@ -27,7 +27,6 @@ go run ./cmd/genseed/   # reads quotes.jsonl, writes init-db/02_seed.sql
 
 ### Database (Docker)
 ```bash
-cp init-db/.env.database .env
 docker compose up -d     # PostgreSQL on localhost:5432
 ```
 
