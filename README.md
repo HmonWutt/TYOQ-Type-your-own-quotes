@@ -4,122 +4,66 @@
 ![Python 3.6+](https://img.shields.io/badge/Python-3.6+-3776AB?logo=python&logoColor=white)
 ![License: MIT](https://img.shields.io/badge/license-MIT-green)
 
-> A MonkeyType-inspired typing-practice CLI plus a Goodreads quote scraper.
-
-## Overview
-
-TYOQ started as a Python `curses` typing-practice tool and grew to include a
-Go scraper that pulls quotes from Goodreads into a JSONL file. The typing
-CLI still uses its own hardcoded quotes today; the goal is to wire it to
-the scraped dataset so you can type any quote on demand.
-
-```
-goodreads.com/quotes ─▶ (scraper, Go) ─▶ quotes.jsonl
-                                                     │
-                                      (typing CLI, Python) ─┘
-                                       [wired in — future]
-```
-
-## Features
-
-### Typing CLI (`main.py`, Python)
-- Live word counter that updates as you type
-- WPM, CPM, and accuracy shown on a results screen after completion
-- Error highlighting in red, correct characters in green, next char underlined
-- Backspace to undo the last keystroke
-- Random hardcoded quotes, or paste your own text
-- ESC to quit; any other key on the results screen starts a new round
-
-### Scraper (`scraper/scraper.go` + `main.go`, Go)
-- Scrapes 100 pages from `https://www.goodreads.com/quotes` — 3,000 quotes
-- Parses HTML with [goquery](https://github.com/PuerkitoBio/goquery)
-- 1-second sleep between page fetches (politeness)
-- Writes one JSON object per line (JSONL) to `quotes.jsonl`
-
-## Requirements
-
-- **Python 3.6+** (uses f-strings). On Windows, also `pip install windows-curses`.
-- **Go 1.26.4+** toolchain (as declared in `go.mod`).
+A MonkeyType-inspired typing CLI, a Goodreads quote scraper, and a PostgreSQL
+seed pipeline.
 
 ## Usage
 
 ### Typing practice (Python)
-
 ```bash
 python3 main.py        # random hardcoded quote
-python3 main.py -i     # paste your own text instead
+python3 main.py -i     # paste your own text
 ```
-
-`-i` is the conventional flag documented here; the code actually enables input
-mode whenever *any* argument is passed, so `python3 main.py anything` works too.
-
-**Controls during typing:**
-- Type the quote; correct chars turn green, wrong ones turn red
-- Backspace deletes the last keystroke
-- ESC at any time quits the program
-- On the results screen: ESC to quit, any other key for a new round
-
-**Stats shown after completion:** WPM, CPM, accuracy %, plus "speed in characters
-per minute" using the standard 5-chars-per-word formula. Note: the paste-input
-mode uses Python's `input()`, which reads a single line — multi-line pastes are
-truncated to the first line.
 
 ### Scrape quotes (Go)
-
 ```bash
-go run .                # writes ./quotes.jsonl (~100s, 3,000 quotes)
+go run ./cmd/scraper/   # writes quotes.jsonl (~3,000 quotes)
 ```
 
-The scraper prints verbose per-quote progress to stdout (author, book, quote,
-tags for each). Output is written to `<cwd>/quotes.jsonl`. Note: the Goodreads
-selectors (`.quoteDetails`, `.quoteText`, `.authorOrTitle`, `.quoteFooter .left`)
-are site-specific; if Goodreads changes its markup the scraper will need
-updating.
+### Generate database seed (Go)
+```bash
+go run ./cmd/genseed/   # reads quotes.jsonl, writes init-db/02_seed.sql
+```
+
+### Database (Docker)
+```bash
+cp init-db/.env.database .env
+docker compose up -d     # PostgreSQL on localhost:5432
+```
+
+## Components
+
+| Component | Path | Description |
+|----------|------|-------------|
+| Typing CLI | `main.py` | `curses`-based typing practice with WPM/accuracy |
+| Scraper | `internal/scraper/`, `cmd/scraper/` | Scrapes 3,000 Goodreads quotes to JSONL |
+| Seed generator | `internal/genseed/`, `cmd/genseed/` | Generates PostgreSQL seed SQL from JSONL |
+| Database | `docker-compose.yml`, `init-db/` | PostgreSQL 18 with auto-loaded schema + seed |
 
 ## Data format
 
-`quotes.jsonl` is [JSON Lines](https://jsonlines.org) / [NDJSON](https://ndjson.org)
-— one compact JSON object per line. Each quote has this schema:
-
-| Field    | Type             | Notes                                   |
-|----------|------------------|-----------------------------------------|
-| `text`   | string           | the quote body                           |
-| `author` | string           | e.g. `"Oscar Wilde"`                    |
-| `source` | string           | book/work title, often `""`              |
-| `tags`   | array of strings | quote tags, or `null` when none present |
-
-Sample (first and third lines of `quotes.jsonl`):
+`quotes.jsonl` is [JSON Lines](https://jsonlines.org) — one JSON object per line:
 
 ```jsonl
 {"text":"Be yourself; everyone else is already taken.","author":"Oscar Wilde","source":"","tags":null}
 {"text":"So many books, so little time.","author":"Frank Zappa","source":"","tags":["books","humor"]}
 ```
 
-`quotes.txt` is a legacy pretty-printed JSON array of the same 3,000 quotes
-(pre-cleanup, with curly quotation marks preserved). It is kept for reference
-but is not regenerated by the current scraper.
+| Field | Type | Notes |
+|-------|------|-------|
+| `text` | string | the quote body |
+| `author` | string | e.g. `"Oscar Wilde"` |
+| `source` | string | book/work title, often `""` |
+| `tags` | array of strings | quote tags, or `null` |
 
 ## Roadmap
 
 - [x] Webscraping Goodreads quotes
+- [x] PostgreSQL database with seed data
+- [ ] Wire the typing CLI to the database
 - [ ] Filter quotes by author / category / tag
-- [ ] Random selection + pagination endpoints
-- [ ] Wire the typing CLI to fetch from the API instead of hardcoded quotes
-- [ ] Save typing scores to a file
 - [ ] Different themes for the CLI
-
-## Contributing
-
-PRs welcome. There are no automated tests yet — to verify a change, run the
-two components manually as described in [Usage](#usage):
-
-1. `python3 main.py` — confirm the typing loop, results screen, and retry work
-2. `go run .` — confirm `quotes.jsonl` is regenerated without errors
-
-Keep commits scoped and follow the existing
-[conventional-commit](https://www.conventionalcommits.org/) style
-(`feat:`, `fix:`, `refactor:`, `docs:`).
 
 ## License
 
-This project is licensed under the MIT License — see [LICENSE](LICENSE).
+MIT — see [LICENSE](LICENSE).
