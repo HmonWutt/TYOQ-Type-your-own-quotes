@@ -3,11 +3,26 @@ services:
     image: postgres:18
     container_name: postgres-dev
     env_file: .env
-    ports :
+    ports:
       - "5432:5432"
     volumes:
       - ./init-db:/docker-entrypoint-initdb.d
       - postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+  app:
+    build: .
+    container_name: tyoq-app
+    env_file: .env
+    tty: true
+    stdin_open: true
+    volumes:
+      - ./main.py:/app/main.py
+    depends_on:
+      db:
+        condition: service_healthy
 volumes:
   postgres_data:
-      

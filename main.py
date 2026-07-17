@@ -3,7 +3,7 @@ import time
 import sys
 import random
 from curses import color_pair, wrapper
-
+import db
 def main(stdscr,text):
 
     RED =1 
@@ -170,27 +170,8 @@ def print_dots():
         time.sleep(0.5)
 
 args = sys.argv
-quote1 = """
-It is often better to light a flamethrower than curse 
-the darkness, although the results are much the same.
-"""
-
-quote2 = """
-The pen is mightier than the sword if the sword is very 
-short and the pen is very sharp.
-"""
-
-quote3 = """
-Build a man a fire, and he'll be warm for a day. Set a man 
-on fire, and he'll be warm for the rest of his life.
-"""
-
-quote4 = """
-It is said that your life flashes before your eyes just 
-before you die. That is true, it's called Living.
-"""
 ipt = ""
-quotes = [quote1,quote2,quote3,quote4]
+quotes = db.main()
 if __name__ == '__main__':
     if len(sys.argv)<2:
         while True:
