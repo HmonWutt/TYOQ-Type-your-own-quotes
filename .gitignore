@@ -1,4 +1,5 @@
 __pycache__
 .env
+.tyoq 
 readme1.md
 03-query.sql
