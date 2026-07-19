@@ -3,3 +3,5 @@ __pycache__
 .tyoq 
 readme1.md
 03-query.sql
+config.json
+todo.md

@@ -22,7 +22,7 @@ def main():
 	# conn.cursor will return a cursor object, you can use this cursor to perform queries
     cursor = conn.cursor()
     print ("Connected!\n")
-    cursor.execute("SELECT * FROM quotes WHERE word_count > 50 LIMIT 5")
+    cursor.execute("SELECT * FROM quotes WHERE word_count > 50 AND word_count < 70")
     records = cursor.fetchall()
     quotes = []
     for record in records:
