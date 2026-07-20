@@ -125,12 +125,11 @@ func MakeQuotes(doc *goquery.Document) []Quote {
 				// for _, r := range quoteText {
 				// 	fmt.Printf("%U %c\n", r, r)
 				// }
-
 				quote.Text = quoteText
 			}
 		})
 
-		if doubleQuotesCount%2 == 0 { // discard the quotes if `"` are unmatched
+		if doubleQuotesCount%2 == 0 && len(quote.Text) > 0 { // discard the quotes if `"` are unmatched
 			// fmt.Printf("Tags: ")
 			var tags []Tag
 			qd.Find(".quoteFooter").Find(".left").Find("a").Each(func(_ int, t *goquery.Selection) {
