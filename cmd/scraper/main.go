@@ -14,8 +14,8 @@ func main() {
 	cwd, err := os.Getwd()
 	fmt.Println(cwd)
 	scraper.Check(err)
-	p := filepath.Join(cwd, "gaiman.jsonl")
+	p := filepath.Join(cwd, "pratchett.jsonl")
 	startIndex := 1
-	offset := 11
-	scraper.ScrapeAndAppend("Neil Gaiman", "https://www.goodreads.com/quotes/search", p, startIndex, offset)
+	offset := 101
+	scraper.ScrapeAndAppend("Terry Pratchett", "https://www.goodreads.com/quotes/search", p, startIndex, offset)
 }
