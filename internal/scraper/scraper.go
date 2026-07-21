@@ -66,18 +66,21 @@ func Scrape(url string) []Quote {
 	}
 	req.Header.Set("Accept", "text/html")
 	req.Header.Set("User-Agent", "Mozilla/5.0")
-	client := http.Client{}
+	req.Header.Set("Connection", "keep-alive")
+	client := &http.Client{
+		Timeout: 5 * time.Second,
+	}
 	res, err := client.Do(req)
 	Check(err)
 	defer res.Body.Close()
-	if res.StatusCode != 200 {
-		log.Fatalf("status code error: %d %s", res.StatusCode, res.Status)
+	if res.StatusCode == 200 || res.StatusCode == 202 {
+		doc, err := goquery.NewDocumentFromReader(res.Body)
+		Check(err)
+		return MakeQuotes(doc)
 	}
 
-	doc, err := goquery.NewDocumentFromReader(res.Body)
-
-	Check(err)
-	return MakeQuotes(doc)
+	log.Fatalf("status code error: %d %s", res.StatusCode, res.Status)
+	return []Quote{}
 }
 
 func ScrapeAllPagesAndWriteToFile(baseURL string, path string) {
@@ -88,7 +91,7 @@ func ScrapeAllPagesAndWriteToFile(baseURL string, path string) {
 		URL := baseURL + query
 		quotes := Scrape(URL)
 		allQuotes = append(allQuotes, quotes...)
-		time.Sleep(1 * time.Second)
+		time.Sleep(2 * time.Second)
 	}
 	write(path, allQuotes)
 }
@@ -202,17 +205,14 @@ func ScrapeAndAppend(author string, baseURL string, path string, startIndex int,
 	fullURL := makeFullURL(baseURL, author)
 	var allQuotes []Quote
 	for i := startIndex; i < offset; i++ {
+		fmt.Printf("Scraping page: %d\n", i)
 		URL := fmt.Sprintf("%s&page=%d", fullURL, i)
 		quotes := Scrape(URL)
 		allQuotes = append(allQuotes, quotes...)
-		time.Sleep(1 * time.Second)
+		time.Sleep(5 * time.Second)
 	}
 
-	err := AppendToJSONL(path, allQuotes)
-	if err != nil {
-		return err
-	}
-	return nil
+	return AppendToJSONL(path, allQuotes)
 }
 
 func AppendToJSONL(filename string, quotes []Quote) error {
