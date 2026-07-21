@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"regexp"
 	"strings"
@@ -13,19 +14,49 @@ import (
 	"github.com/PuerkitoBio/goquery"
 )
 
-type Quote struct {
-	Text   string `json:"text"`
-	Author string `json:"author"`
-	Source string `json:"source"`
-	Tags   []Tag  `json:"tags"`
-}
+type (
+	Tag   string
+	Quote struct {
+		Text   string `json:"text"`
+		Author string `json:"author"`
+		Source string `json:"source"`
+		Tags   []Tag  `json:"tags"`
+	}
+)
 
-type Tag string
+type Scraper struct {
+	buffer    []Quote
+	filename  string
+	batchSize int
+}
 
 func Check(e error) {
 	if e != nil {
 		log.Fatal(e)
 	}
+}
+
+const (
+	RIGHTDOUBLEQUOTE = "\u201D"
+	LEFTDOUBLEQUOTE  = "\u201C"
+	NEWLINE          = "\n"
+	LEFTSINGLEQUOTE  = "\u2018"
+	RIGHTSINGLEQUOTE = "\u2019"
+	APOSTROPHE       = "\u2027"
+	HTMLSINGLEQUOTE  = "&#34;"
+	HTMLDOUBLEQUOTE  = "&#39;"
+)
+
+func makeFullURL(baseURL string, author string) string {
+	u, _ := url.Parse(baseURL)
+
+	q := u.Query()
+	q.Set("q", author)
+	q.Set("commit", "Search")
+	u.RawQuery = q.Encode()
+
+	fmt.Println(u.String())
+	return u.String()
 }
 
 func Scrape(url string) []Quote {
@@ -64,34 +95,37 @@ func ScrapeAllPagesAndWriteToFile(baseURL string, path string) {
 
 func MakeQuotes(doc *goquery.Document) []Quote {
 	var quotes []Quote
-
 	doc.Find(".quoteDetails").Each(func(i int, qd *goquery.Selection) {
 		var quote Quote
-		var doubleQuotesCount int
-		oldNew := map[string]string{
-			"\u2018": `'`, // left single quote
-			"\u2019": `'`, // right single quote
-			"\u2027": `'`, // apostrophe
-			",":      "",  // remove "," from the end. The original looks like this "Suzanne Collins, Hunger games"
-		}
+		// var doubleQuotesCount int
+		// oldNew := map[string]string{
+		// 	"\u2018": `'`, // left single quote
+		// 	"\u2019": `'`, // right single quote
+		// 	"\u2027": `'`, // apostrophe
+		// 	",":      "",  // remove "," from the end. The original looks like this "Suzanne Collins, Hunger games"
+		// }
+		// oldNewQuoteText := map[string]string{
+		// 	"\u201C": `"`, // left curly quote
+		// 	"\u201D": `"`, // right curly quote
+		// 	//"\n", " ", // replace empty new line with " " instead of "" cause "" leaves no space between the two sentences
+		// 	"\u2018": `'`, // left single quote
+		// 	"\u2019": `'`, // right single quote
+		// 	"\u2027": `'`, // apostrophe look alike
+		// 	"&#34;":  `"`, // html ""
+		// 	"&#39;":  `'`, // html ""
+		// }
 
 		qd.Find(".quoteText").Each(func(_ int, s *goquery.Selection) {
 			s.Find(".authorOrTitle").Each(func(j int, a *goquery.Selection) {
+				text := strings.TrimSpace(a.Text())
 				if j == 0 {
-					author := strings.TrimSpace(a.Text())
-
-					quote.Author = cleanText(oldNew, author)
+					quote.Author = text
 				} else {
-
-					source := strings.TrimSpace(a.Text())
-					// fmt.Printf("Book: %s\n", source)
-					quote.Source = cleanText(oldNew, source)
+					quote.Source = text
 				}
 			})
 			html, _ := qd.Html()
-
 			re := regexp.MustCompile(`(?s)<div class="quoteText">(.*?)<span class="authorOrTitle">`)
-
 			matches := re.FindStringSubmatch(html)
 			var joined string
 			if len(matches) > 1 {
@@ -106,45 +140,34 @@ func MakeQuotes(doc *goquery.Document) []Quote {
 				quoteText := strings.TrimSpace(parts[0]) // remove leading and trailing white space
 
 				quoteText = strings.Join(strings.Fields(quoteText), " ")
-				oldNewQuoteText := map[string]string{
-					"\u201C": `"`, // left curly quote
-					"\u201D": `"`, // right curly quote
-					//"\n", " ", // replace empty new line with " " instead of "" cause "" leaves no space between the two sentences
-					"\u2018": `'`, // left single quote
-					"\u2019": `'`, // right single quote
-					"\u2027": `'`, // apostrophe look alike
-					"&#34;":  `"`, // html ""
-					"&#39;":  `'`, // html ""
-				}
-				quoteText = cleanText(oldNewQuoteText, quoteText)
-				doubleQuotesCount = strings.Count(quoteText, `"`)
-				if doubleQuotesCount == 2 {
-					// Only 2 quotes = single quoted statement, safe to trim
-					quoteText = strings.Trim(quoteText, `"`) // remove leading and trailing quotations
-				}
-				// for _, r := range quoteText {
-				// 	fmt.Printf("%U %c\n", r, r)
-				// }
 				quote.Text = quoteText
 			}
 		})
 
-		if doubleQuotesCount%2 == 0 && len(quote.Text) > 0 { // discard the quotes if `"` are unmatched
-			// fmt.Printf("Tags: ")
-			var tags []Tag
-			qd.Find(".quoteFooter").Find(".left").Find("a").Each(func(_ int, t *goquery.Selection) {
-				cleanedTag := cleanText(oldNew, t.Text())
-				tag := Tag(cleanedTag)
+		// if doubleQuotesCount%2 == 0 && len(quote.Text) > 0 { // only take if quotes number fo `"` and `'` are matched and text is not empty
+		// fmt.Printf("Tags: ")
+		var tags []Tag
+		qd.Find(".quoteFooter").Find(".left").Find("a").Each(func(_ int, t *goquery.Selection) {
+			// cleanedTag := cleanText(oldNew, t.Text())
+			// tag := Tag(cleanedTag)
+			tag := Tag(t.Text())
 
-				tags = append(tags, tag)
-				// fmt.Printf("%s, ", t.Text())
-			})
-			quote.Tags = tags
-			quotes = append(quotes, quote)
-			// fmt.Println("\n-----------------------------------")
-		}
+			tags = append(tags, tag)
+		})
+		quote.Tags = tags
+		quotes = append(quotes, quote)
 	})
 	return quotes
+}
+
+func removeLeadingAndTrailingQuotes(quoteText string) string {
+	var cleanText string
+	doubleQuotesCount := strings.Count(quoteText, `"`)
+	if doubleQuotesCount == 2 {
+		// Only 2 quotes = single quoted statement, safe to trim
+		cleanText = strings.Trim(quoteText, `"`) // remove leading and trailing quotations
+	}
+	return cleanText
 }
 
 func cleanText(dict map[string]string, source string) string {
@@ -152,6 +175,13 @@ func cleanText(dict map[string]string, source string) string {
 		source = strings.ReplaceAll(source, old, new)
 	}
 	return source
+}
+
+func splitAndJoin(text string, spliton string, delimiter string) string {
+	var joined string
+	parts := strings.Split(text, spliton)
+	joined = strings.Join(parts, delimiter)
+	return joined
 }
 
 func write(filepath string, quotes []Quote) {
@@ -166,4 +196,41 @@ func write(filepath string, quotes []Quote) {
 		}
 	}
 	log.Printf("✓ Saved %d quotes\n", len(quotes))
+}
+
+func ScrapeAndAppend(author string, baseURL string, path string, startIndex int, offset int) error {
+	fullURL := makeFullURL(baseURL, author)
+	var allQuotes []Quote
+	for i := startIndex; i < offset; i++ {
+		URL := fmt.Sprintf("%s&page=%d", fullURL, i)
+		quotes := Scrape(URL)
+		allQuotes = append(allQuotes, quotes...)
+		time.Sleep(1 * time.Second)
+	}
+
+	err := AppendToJSONL(path, allQuotes)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func AppendToJSONL(filename string, quotes []Quote) error {
+	file, err := os.OpenFile(filename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	for _, quote := range quotes {
+		bytes, _ := json.Marshal(quote)
+		_, err = file.Write(bytes)
+		if err != nil {
+			return err
+		}
+		_, err = file.Write([]byte("\n"))
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
