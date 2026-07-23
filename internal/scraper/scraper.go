@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"math/rand"
 	"net/http"
 	"net/url"
 	"os"
@@ -14,6 +15,14 @@ import (
 	"github.com/PuerkitoBio/goquery"
 )
 
+type Scraper struct {
+	OutputFile string
+	StartIndex int
+	Offset     int
+	BaseURL    string
+	Author     string
+	Referer    string
+}
 type (
 	Tag   string
 	Quote struct {
@@ -24,164 +33,128 @@ type (
 	}
 )
 
-type Scraper struct {
-	buffer    []Quote
-	filename  string
-	batchSize int
-}
-
 func Check(e error) {
 	if e != nil {
 		log.Fatal(e)
 	}
 }
 
-const (
-	RIGHTDOUBLEQUOTE = "\u201D"
-	LEFTDOUBLEQUOTE  = "\u201C"
-	NEWLINE          = "\n"
-	LEFTSINGLEQUOTE  = "\u2018"
-	RIGHTSINGLEQUOTE = "\u2019"
-	APOSTROPHE       = "\u2027"
-	HTMLSINGLEQUOTE  = "&#34;"
-	HTMLDOUBLEQUOTE  = "&#39;"
-)
-
-func makeFullURL(baseURL string, author string) string {
+func makeFullURL(baseURL string, params map[string]string) string {
 	u, _ := url.Parse(baseURL)
 
 	q := u.Query()
-	q.Set("q", author)
 	q.Set("commit", "Search")
-	u.RawQuery = q.Encode()
+	q.Set("utf8", "✓")
+	for key, val := range params {
+		q.Set(key, val)
+	}
 
-	fmt.Println(u.String())
+	u.RawQuery = q.Encode()
+	// fmt.Println(u.String())
 	return u.String()
 }
 
-func Scrape(url string) []Quote {
+func Scrape(url string, referer string) (int, *goquery.Document) {
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		log.Fatal(err)
 	}
-	req.Header.Set("Accept", "text/html")
-	req.Header.Set("User-Agent", "Mozilla/5.0")
-	client := http.Client{}
+	req.Header.Set("referer", referer)
+	req.Header.Set("User-Agent", randomUserAgent())
+	req.Header.Set("Connection", "keep-alive")
+	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
+	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+
+	client := &http.Client{
+		Timeout: 600 * time.Second,
+	}
 	res, err := client.Do(req)
 	Check(err)
 	defer res.Body.Close()
-	if res.StatusCode != 200 {
-		log.Fatalf("status code error: %d %s", res.StatusCode, res.Status)
+	if res.StatusCode == 200 {
+		doc, err := goquery.NewDocumentFromReader(res.Body)
+		Check(err)
+		return res.StatusCode, doc
 	}
-
-	doc, err := goquery.NewDocumentFromReader(res.Body)
-
-	Check(err)
-	return MakeQuotes(doc)
+	if res.StatusCode == 202 {
+		return res.StatusCode, nil
+	}
+	log.Fatalf("status code error: %d %s", res.StatusCode, res.Status)
+	return res.StatusCode, nil
 }
 
-func ScrapeAllPagesAndWriteToFile(baseURL string, path string) {
-	totalPages := 100
-	var allQuotes []Quote
-	for i := 1; i < totalPages+1; i++ {
-		query := fmt.Sprintf("?page=%d", i)
-		URL := baseURL + query
-		quotes := Scrape(URL)
-		allQuotes = append(allQuotes, quotes...)
-		time.Sleep(1 * time.Second)
-	}
-	write(path, allQuotes)
-}
+// func ScrapeAllPagesAndWriteToFile(baseURL string, path string) {
+// 	totalPages := 100
+// 	var allQuotes []Quote
+// 	for i := 1; i < totalPages+1; i++ {
+// 		query := fmt.Sprintf("?page=%d", i)
+// 		URL := baseURL + query
+// 		quotes := Scrape(URL, "")
+// 		allQuotes = append(allQuotes, quotes...)
+// 		time.Sleep(2 * time.Second)
+// 	}
+// 	write(path, allQuotes)
+// }
 
 func MakeQuotes(doc *goquery.Document) []Quote {
 	var quotes []Quote
-	doc.Find(".quoteDetails").Each(func(i int, qd *goquery.Selection) {
+	doc.Find(".quoteDetails").Each(func(i int, quoteDetails *goquery.Selection) {
 		var quote Quote
-		// var doubleQuotesCount int
-		// oldNew := map[string]string{
-		// 	"\u2018": `'`, // left single quote
-		// 	"\u2019": `'`, // right single quote
-		// 	"\u2027": `'`, // apostrophe
-		// 	",":      "",  // remove "," from the end. The original looks like this "Suzanne Collins, Hunger games"
-		// }
-		// oldNewQuoteText := map[string]string{
-		// 	"\u201C": `"`, // left curly quote
-		// 	"\u201D": `"`, // right curly quote
-		// 	//"\n", " ", // replace empty new line with " " instead of "" cause "" leaves no space between the two sentences
-		// 	"\u2018": `'`, // left single quote
-		// 	"\u2019": `'`, // right single quote
-		// 	"\u2027": `'`, // apostrophe look alike
-		// 	"&#34;":  `"`, // html ""
-		// 	"&#39;":  `'`, // html ""
-		// }
-
-		qd.Find(".quoteText").Each(func(_ int, s *goquery.Selection) {
-			s.Find(".authorOrTitle").Each(func(j int, a *goquery.Selection) {
-				text := strings.TrimSpace(a.Text())
-				if j == 0 {
-					quote.Author = text
-				} else {
-					quote.Source = text
-				}
+		html, _ := quoteDetails.Html()
+		quoteText := extractQuoteText(html)
+		if quoteText != "" {
+			quote.Text = quoteText
+			quoteDetails.Find(".quoteText").Each(func(_ int, s *goquery.Selection) {
+				// if doubleQuotesCount%2 == 0 && len(quote.Text) > 0 { // only take if quotes number fo `"` and `'` are matched and text is not empty
+				s.Find(".authorOrTitle").Each(func(j int, a *goquery.Selection) {
+					text := strings.TrimSpace(a.Text())
+					if j == 0 {
+						quote.Author = text
+					} else {
+						quote.Source = text
+					}
+				})
 			})
-			html, _ := qd.Html()
-			re := regexp.MustCompile(`(?s)<div class="quoteText">(.*?)<span class="authorOrTitle">`)
-			matches := re.FindStringSubmatch(html)
-			var joined string
-			if len(matches) > 1 {
-				quoteText := matches[1]
 
-				parts := strings.Split(quoteText, "<br/>")
-				joined = strings.Join(parts, " ")
-			}
-
-			if !strings.Contains(joined, "<") { // discard if it contains formatting like <i> <b> etc
-				parts := strings.Split(joined, "―")
-				quoteText := strings.TrimSpace(parts[0]) // remove leading and trailing white space
-
-				quoteText = strings.Join(strings.Fields(quoteText), " ")
-				quote.Text = quoteText
-			}
-		})
-
-		// if doubleQuotesCount%2 == 0 && len(quote.Text) > 0 { // only take if quotes number fo `"` and `'` are matched and text is not empty
-		// fmt.Printf("Tags: ")
-		var tags []Tag
-		qd.Find(".quoteFooter").Find(".left").Find("a").Each(func(_ int, t *goquery.Selection) {
-			// cleanedTag := cleanText(oldNew, t.Text())
-			// tag := Tag(cleanedTag)
-			tag := Tag(t.Text())
-
-			tags = append(tags, tag)
-		})
-		quote.Tags = tags
-		quotes = append(quotes, quote)
+			var tags []Tag
+			quoteDetails.Find(".quoteFooter").Find(".left").Find("a").Each(func(_ int, t *goquery.Selection) {
+				tag := Tag(t.Text())
+				tags = append(tags, tag)
+			})
+			quote.Tags = tags
+			quotes = append(quotes, quote)
+		}
 	})
 	return quotes
 }
 
-func removeLeadingAndTrailingQuotes(quoteText string) string {
-	var cleanText string
-	doubleQuotesCount := strings.Count(quoteText, `"`)
-	if doubleQuotesCount == 2 {
-		// Only 2 quotes = single quoted statement, safe to trim
-		cleanText = strings.Trim(quoteText, `"`) // remove leading and trailing quotations
+func extractQuoteText(html string) string {
+	quoteText := extractQuoteDivContent(html)
+	if quoteText == "" {
+		return quoteText
 	}
-	return cleanText
+	quoteText = splitAndJoin(quoteText, "<br/>", " ")
+	//	if !strings.Contains(joined, "<") { // discard if it contains formatting like <i> <b> etc
+	var parts []string
+	if quoteText == "" {
+		return quoteText
+	}
+	parts = strings.Split(quoteText, "―")
+	if len(parts) == 0 {
+		return ""
+	}
+	quoteText = strings.TrimSpace(parts[0]) // remove leading and trailing white space
+	quoteText = strings.Join(strings.Fields(quoteText), " ")
+	return quoteText
 }
 
-func cleanText(dict map[string]string, source string) string {
-	for old, new := range dict {
-		source = strings.ReplaceAll(source, old, new)
+func extractQuoteDivContent(html string) string {
+	re := regexp.MustCompile(`(?s)<div class="quoteText">(.*?)<span class="authorOrTitle">`)
+	matches := re.FindStringSubmatch(html)
+	if len(matches) > 1 {
+		return matches[1]
 	}
-	return source
-}
-
-func splitAndJoin(text string, spliton string, delimiter string) string {
-	var joined string
-	parts := strings.Split(text, spliton)
-	joined = strings.Join(parts, delimiter)
-	return joined
+	return ""
 }
 
 func write(filepath string, quotes []Quote) {
@@ -198,19 +171,36 @@ func write(filepath string, quotes []Quote) {
 	log.Printf("✓ Saved %d quotes\n", len(quotes))
 }
 
-func ScrapeAndAppend(author string, baseURL string, path string, startIndex int, offset int) error {
-	fullURL := makeFullURL(baseURL, author)
-	var allQuotes []Quote
-	for i := startIndex; i < offset; i++ {
-		URL := fmt.Sprintf("%s&page=%d", fullURL, i)
-		quotes := Scrape(URL)
-		allQuotes = append(allQuotes, quotes...)
-		time.Sleep(1 * time.Second)
-	}
+func (s *Scraper) ScrapeAndAppend() error {
+	for i := s.StartIndex; i < s.Offset; i++ {
+		params := map[string]string{}
+		params["q"] = s.Author
+		if i > 1 {
+			params["page"] = fmt.Sprintf("%d", i)
+		}
+		fullURL := makeFullURL(s.BaseURL, params)
 
-	err := AppendToJSONL(path, allQuotes)
-	if err != nil {
-		return err
+		fmt.Printf("Scraping: %s\n", fullURL)
+		statusCode, doc := Scrape(fullURL, s.Referer)
+		fmt.Printf("StatusCode: %d\n", statusCode)
+		for statusCode == 202 {
+			fiveMinutesOrMore := 5*time.Minute + time.Duration(rand.Intn(5))*time.Minute
+			fmt.Printf("Waiting for %v\n", fiveMinutesOrMore)
+			statusCode, doc = Scrape(fullURL, s.Referer)
+		}
+		if statusCode == 200 {
+			s.Referer = fullURL
+			quotes := MakeQuotes(doc)
+			err := AppendToJSONL(s.OutputFile, quotes)
+			if err != nil {
+				return err
+			}
+			randomDelay := time.Duration(rand.Intn(60)) * time.Second
+			fmt.Printf("Sleeping for %v \n", randomDelay)
+			time.Sleep(randomDelay)
+		} else {
+			return fmt.Errorf("failed to scrape website. \nStatusCode:%d", statusCode)
+		}
 	}
 	return nil
 }

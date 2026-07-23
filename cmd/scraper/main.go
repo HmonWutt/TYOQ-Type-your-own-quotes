@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 
@@ -13,9 +14,17 @@ func main() {
 
 	cwd, err := os.Getwd()
 	fmt.Println(cwd)
-	scraper.Check(err)
-	p := filepath.Join(cwd, "gaiman.jsonl")
-	startIndex := 1
-	offset := 11
-	scraper.ScrapeAndAppend("Neil Gaiman", "https://www.goodreads.com/quotes/search", p, startIndex, offset)
+	scraper := scraper.Scraper{
+		OutputFile: filepath.Join(cwd, "holt.jsonl"),
+		StartIndex: 2,
+		Offset:     21,
+		BaseURL:    "https://www.goodreads.com/quotes/search",
+		Author:     "Tom Holt",
+		Referer:    "https://www.goodreads.com/quotes",
+	}
+	fmt.Println(scraper.Referer)
+	err = scraper.ScrapeAndAppend()
+	if err != nil {
+		log.Fatal(err)
+	}
 }
