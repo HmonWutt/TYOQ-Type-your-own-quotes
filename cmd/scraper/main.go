@@ -15,12 +15,12 @@ func main() {
 	cwd, err := os.Getwd()
 	fmt.Println(cwd)
 	scraper := scraper.Scraper{
-		OutputFile: filepath.Join(cwd, "gaiman.jsonl"),
-		StartIndex: 1,
-		Offset:     6,
+		OutputFile: filepath.Join(cwd, "holt.jsonl"),
+		StartIndex: 2,
+		Offset:     21,
 		BaseURL:    "https://www.goodreads.com/quotes/search",
-		Author:     "neil gaiman",
-		Referer:    fmt.Sprintf("https://www.goodreads.com/quotes"),
+		Author:     "Tom Holt",
+		Referer:    "https://www.goodreads.com/quotes",
 	}
 	fmt.Println(scraper.Referer)
 	err = scraper.ScrapeAndAppend()

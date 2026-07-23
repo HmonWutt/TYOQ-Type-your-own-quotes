@@ -54,7 +54,7 @@ func makeFullURL(baseURL string, params map[string]string) string {
 	return u.String()
 }
 
-func Scrape(url string, referer string) []Quote {
+func Scrape(url string, referer string) (int, *goquery.Document) {
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		log.Fatal(err)
@@ -66,33 +66,35 @@ func Scrape(url string, referer string) []Quote {
 	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
 
 	client := &http.Client{
-		Timeout: 60 * time.Second,
+		Timeout: 600 * time.Second,
 	}
 	res, err := client.Do(req)
 	Check(err)
 	defer res.Body.Close()
-	if res.StatusCode == 200 || res.StatusCode == 202 {
+	if res.StatusCode == 200 {
 		doc, err := goquery.NewDocumentFromReader(res.Body)
 		Check(err)
-		return MakeQuotes(doc)
+		return res.StatusCode, doc
 	}
-
+	if res.StatusCode == 202 {
+		return res.StatusCode, nil
+	}
 	log.Fatalf("status code error: %d %s", res.StatusCode, res.Status)
-	return []Quote{}
+	return res.StatusCode, nil
 }
 
-func ScrapeAllPagesAndWriteToFile(baseURL string, path string) {
-	totalPages := 100
-	var allQuotes []Quote
-	for i := 1; i < totalPages+1; i++ {
-		query := fmt.Sprintf("?page=%d", i)
-		URL := baseURL + query
-		quotes := Scrape(URL, "")
-		allQuotes = append(allQuotes, quotes...)
-		time.Sleep(2 * time.Second)
-	}
-	write(path, allQuotes)
-}
+// func ScrapeAllPagesAndWriteToFile(baseURL string, path string) {
+// 	totalPages := 100
+// 	var allQuotes []Quote
+// 	for i := 1; i < totalPages+1; i++ {
+// 		query := fmt.Sprintf("?page=%d", i)
+// 		URL := baseURL + query
+// 		quotes := Scrape(URL, "")
+// 		allQuotes = append(allQuotes, quotes...)
+// 		time.Sleep(2 * time.Second)
+// 	}
+// 	write(path, allQuotes)
+// }
 
 func MakeQuotes(doc *goquery.Document) []Quote {
 	var quotes []Quote
@@ -179,16 +181,26 @@ func (s *Scraper) ScrapeAndAppend() error {
 		fullURL := makeFullURL(s.BaseURL, params)
 
 		fmt.Printf("Scraping: %s\n", fullURL)
-		quotes := Scrape(fullURL, s.Referer)
-		fmt.Printf("Total quotes: %d\n", len(quotes))
-		s.Referer = fullURL
-		err := AppendToJSONL(s.OutputFile, quotes)
-		if err != nil {
-			return err
+		statusCode, doc := Scrape(fullURL, s.Referer)
+		fmt.Printf("StatusCode: %d\n", statusCode)
+		for statusCode == 202 {
+			fiveMinutesOrMore := 5*time.Minute + time.Duration(rand.Intn(5))*time.Minute
+			fmt.Printf("Waiting for %v\n", fiveMinutesOrMore)
+			statusCode, doc = Scrape(fullURL, s.Referer)
 		}
-		randomDelay := time.Duration(rand.Intn(60)) * time.Second
-		fmt.Printf("Sleeping for %v \n", randomDelay)
-		time.Sleep(randomDelay)
+		if statusCode == 200 {
+			s.Referer = fullURL
+			quotes := MakeQuotes(doc)
+			err := AppendToJSONL(s.OutputFile, quotes)
+			if err != nil {
+				return err
+			}
+			randomDelay := time.Duration(rand.Intn(60)) * time.Second
+			fmt.Printf("Sleeping for %v \n", randomDelay)
+			time.Sleep(randomDelay)
+		} else {
+			return fmt.Errorf("failed to scrape website. \nStatusCode:%d", statusCode)
+		}
 	}
 	return nil
 }
