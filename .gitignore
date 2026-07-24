@@ -5,3 +5,8 @@ readme1.md
 03-query.sql
 config.json
 todo.md
+*.jsonl
+*.txt
+archive_seed.sql
+03-query.sql
+data/quotes/*.jsonl
