@@ -4,40 +4,28 @@
 ![Python 3.6+](https://img.shields.io/badge/Python-3.6+-3776AB?logo=python&logoColor=white)
 ![License: MIT](https://img.shields.io/badge/license-MIT-green)
 
-A MonkeyType-inspired typing CLI, a Goodreads quote scraper, and a PostgreSQL
-seed pipeline.
+A MonkeyType-inspired typing CLI, a web scraper for quotes, and a sqlite database
 
 ## Usage
 
 ### Typing practice (Python)
 ```bash
-python3 main.py        # random hardcoded quote
+python3 main.py        # random quotes
 python3 main.py -i     # paste your own text
 ```
 
-### Scrape quotes (Go)
+### Typing practice (Docker)
 ```bash
-go run ./cmd/scraper/   # writes quotes.jsonl (~3,000 quotes)
+docker compose run --rm -it app    #random quotes
 ```
-
-### Generate database seed (Go)
-```bash
-go run ./cmd/genseed/   # reads quotes.jsonl, writes init-db/02_seed.sql
-```
-
-### Database (Docker)
-```bash
-docker compose up -d     # PostgreSQL on localhost:5432
-```
-
 ## Components
 
 | Component | Path | Description |
-|----------|------|-------------|
-| Typing CLI | `main.py` | `curses`-based typing practice with WPM/accuracy |
-| Scraper | `internal/scraper/`, `cmd/scraper/` | Scrapes 3,000 Goodreads quotes to JSONL |
-| Seed generator | `internal/genseed/`, `cmd/genseed/` | Generates PostgreSQL seed SQL from JSONL |
-| Database | `docker-compose.yml`, `init-db/` | PostgreSQL 18 with auto-loaded schema + seed |
+|-----------|------|-------------|
+| Typing CLI | `app/main.py` | `curses`-based typing practice with WPM/accuracy |
+| Scraper | `tools/internal/scraper/`, `tools/cmd/scraper/` | Scrapes 3,000 quotes to JSONL |
+| Seed generator | `tools/internal/genseed/`, `tools/cmd/genseed/` | Generates sqlite seed file from JSONL |
+| Database | `data/seed.db` | sqlite3 schema + seed |
 
 ## Data format
 
@@ -57,10 +45,13 @@ docker compose up -d     # PostgreSQL on localhost:5432
 
 ## Roadmap
 
-- [x] Webscraping Goodreads quotes
-- [x] PostgreSQL database with seed data
-- [ ] Wire the typing CLI to the database
+- [x] Webscraping quotes
+- [x] ~~PostgreSQL database with seed data~~
+- [x] Migrate to sqlite 
+- [x] Wire the typing CLI to the database
+- [ ] Clean quotes
 - [ ] Filter quotes by author / category / tag
+- [ ] Replace UI with Bubbletea
 - [ ] Different themes for the CLI
 
 ## License
