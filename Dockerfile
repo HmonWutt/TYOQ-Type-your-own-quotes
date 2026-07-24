@@ -1,7 +1,5 @@
 FROM python:3.12-slim
 WORKDIR /app
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-COPY main.py .
-COPY db.py .
+COPY app/main.py .
+COPY app/db.py .
 CMD ["python", "-u", "main.py"]
