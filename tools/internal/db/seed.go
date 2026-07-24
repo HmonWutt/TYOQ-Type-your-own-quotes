@@ -106,7 +106,7 @@ func batchInsert(db *sql.DB, quotes []scraper.Quote) {
 
 	for _, q := range quotes {
 		tagsJSON, _ := json.Marshal(q.Tags)
-		if _, err := stmt.Exec(q.Text, q.Author, q.Source, string(tagsJSON), len(strings.Fields(q.Text))); err != nil {
+		if _, err := stmt.Exec(q.Text, q.Author, q.Source, len(strings.Fields(q.Text)), string(tagsJSON)); err != nil {
 			exitIfError(err)
 		}
 	}
