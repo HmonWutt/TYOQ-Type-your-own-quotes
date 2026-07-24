@@ -5,11 +5,8 @@ import (
 	"fmt"
 
 	"github.com/HmonWutt/TYOQ-Type-your-own-quotes/internal/scraper"
+	_ "github.com/mattn/go-sqlite3"
 )
-
-const dbPath = "init.db"
-
-var jsonlPath = []string{"fforde.jsonl", "gaiman.jsonl", "adams.jsonl"}
 
 func Insert(db *sql.DB, c *scraper.Quote) (int64, error) {
 	sql := `INSERT INTO quotes (name, population, area) 
@@ -21,9 +18,19 @@ func Insert(db *sql.DB, c *scraper.Quote) (int64, error) {
 	return result.LastInsertId()
 }
 
+type (
+	Tag   string
+	Quote struct {
+		Text   string `json:"text"`
+		Author string `json:"author"`
+		Source string `json:"source"`
+		Tags   []Tag  `json:"tags"`
+	}
+)
+
 func main() {
 	// connect to the SQLite database
-	db, err := sql.Open("sqlite", "./init.db")
+	db, err := sql.Open("sqlite", "./my.db?_pragma=foreign_keys(1)")
 	if err != nil {
 		fmt.Println(err)
 		return
