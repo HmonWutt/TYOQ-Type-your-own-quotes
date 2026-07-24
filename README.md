@@ -1,29 +1,29 @@
 # TYOQ — Type Your Own Quotes
 
 ![Go 1.26.4](https://img.shields.io/badge/Go-1.26.4+-00ADD8?logo=go&logoColor=white)
-![Python 3.6+](https://img.shields.io/badge/Python-3.6+-3776AB?logo=python&logoColor=white)
 ![License: MIT](https://img.shields.io/badge/license-MIT-green)
 
-A MonkeyType-inspired typing CLI, a web scraper for quotes, and a sqlite database
+A MonkeyType-inspired typing CLI
 
 ## Usage
 
-### Typing practice (Python)
+### Typing practice (Go)
 ```bash
-python3 main.py        # random quotes
-python3 main.py -i     # paste your own text
+cd ./tools
+go run ./cmd/typing/main.go # random quotes
+go run ./cmd/typing/main.go -i     # paste your own text
 ```
 
-### Typing practice (Docker)
-```bash
-docker compose run --rm -it app    #random quotes
-```
+<!-- ### Typing practice (Docker) -->
+<!-- ```bash -->
+<!-- docker compose run --rm -it app    #random quotes -->
+<!-- ``` -->
 ## Components
 
 | Component | Path | Description |
 |-----------|------|-------------|
-| Typing CLI | `app/main.py` | `curses`-based typing practice with WPM/accuracy |
-| Scraper | `tools/internal/scraper/`, `tools/cmd/scraper/` | Scrapes 3,000 quotes to JSONL |
+| Typing CLI | `tools/internal/typing/`, `tools/cmd/typing` | `Bubbletea TUI` with WPM/accuracy |
+| Scraper | `tools/internal/scraper/`, `tools/cmd/scraper/` | Scrapes quotes to JSONL |
 | Seed generator | `tools/internal/genseed/`, `tools/cmd/genseed/` | Generates sqlite seed file from JSONL |
 | Database | `data/seed.db` | sqlite3 schema + seed |
 
@@ -44,14 +44,14 @@ docker compose run --rm -it app    #random quotes
 | `tags` | array of strings | quote tags, or `null` |
 
 ## Roadmap
-
+- [x] ~~Typing UI built in python using `curses` library~~
 - [x] Webscraping quotes
 - [x] ~~PostgreSQL database with seed data~~
 - [x] Migrate to sqlite 
 - [x] Wire the typing CLI to the database
+- [x] Replace UI with Bubbletea
 - [ ] Clean quotes
 - [ ] Filter quotes by author / category / tag
-- [ ] Replace UI with Bubbletea
 - [ ] Different themes for the CLI
 
 ## License
