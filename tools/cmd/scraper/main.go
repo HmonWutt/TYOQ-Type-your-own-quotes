@@ -6,7 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/HmonWutt/TYOQ-Type-your-own-quotes/internal/scraper"
+	"github.com/HmonWutt/TYOQ-Type-your-own-quotes/tools/internal/scraper"
 )
 
 func main() {
