@@ -1,10 +1,8 @@
 package typing
 
 import (
-	"bufio"
 	"database/sql"
 	"fmt"
-	"math/rand/v2"
 	"os"
 	"strings"
 	"time"
@@ -24,32 +22,26 @@ var (
 	magentaStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#CBA6F7"))
 	yellowStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("#F9E2AF"))
 	redStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("#F38BA8"))
-
-	headerStyle = lipgloss.NewStyle().
+	headerStyle  = lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(lipgloss.Color("#CBA6F7")).
 			Padding(1, 3).
 			Align(lipgloss.Center).
 			Foreground(lipgloss.Color("#F5C2E7")).Bold(true)
-
 	badgeStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#1E1E2E")).
 			Background(lipgloss.Color("#F9E2AF")).
 			Padding(0, 1)
-
 	badgeLabelStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#6C7086"))
-
 	footerStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#585B70")).Italic(true)
-
 	resultHeaderStyle = lipgloss.NewStyle().
 				Border(lipgloss.RoundedBorder()).
 				BorderForeground(lipgloss.Color("#89B4FA")).
 				Padding(1, 3).
 				Align(lipgloss.Center).
 				Foreground(lipgloss.Color("#89DCEB")).Bold(true)
-
 	resultBoxStyle = lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(lipgloss.Color("#45475A")).
@@ -71,6 +63,7 @@ type model struct {
 	width          int
 	height         int
 	scrollOffset   int
+	index          int
 }
 
 func loadQuotes() []string {
@@ -79,13 +72,13 @@ func loadQuotes() []string {
 		return nil
 	}
 	defer db.Close()
-	query := "SELECT text FROM quotes WHERE word_count < 50 LIMIT 5"
-	rows, err := db.Query(query)
+	const LIMIT = 500
+	queryByLength := fmt.Sprintf("select text from quotes where word_count < %d limit %d", 100, LIMIT)
+	rows, err := db.Query(queryByLength)
 	if err != nil {
 		return nil
 	}
 	defer rows.Close()
-
 	var quotes []string
 	for rows.Next() {
 		var text string
@@ -97,51 +90,124 @@ func loadQuotes() []string {
 	return quotes
 }
 
-func readCustomInput() string {
-	instruction := "Welcome to TYOQ. Paste your text below"
-	length := len(instruction) + 4
-	hLine := "+" + strings.Repeat("-", length) + "+"
-	vLine := "|" + strings.Repeat(" ", length) + "|"
-	vLineMid := "|  " + instruction + "  |"
+type inputPhase int
 
-	fmt.Println("\033[92m" + hLine + "\033[00m")
-	fmt.Println("\033[92m" + vLine + "\033[00m")
-	fmt.Println("\033[92m" + vLineMid + "\033[00m")
-	fmt.Println("\033[92m" + vLine + "\033[00m")
-	fmt.Println("\033[92m" + hLine + "\033[00m")
+const (
+	phaseTyping inputPhase = iota
+	phaseRedirecting
+)
 
-	reader := bufio.NewReader(os.Stdin)
-	input, _ := reader.ReadString('\n')
-	input = strings.TrimSpace(input)
+type customInputModel struct {
+	input     []rune
+	width     int
+	height    int
+	cancelled bool
+}
 
-	fmt.Print("\033[92mInput saved. Redirecting to the typing arena \033[00m")
-	for range 4 {
-		fmt.Print("\033[92m➤\033[00m")
-		time.Sleep(500 * time.Millisecond)
+func newCustomInputModel() customInputModel {
+	return customInputModel{width: 80, height: 24}
+}
+
+func (m customInputModel) Init() tea.Cmd {
+	return nil
+}
+
+func (m customInputModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.width = msg.Width
+		m.height = msg.Height
+
+	case tea.PasteMsg:
+		m.input = append(m.input, []rune(msg.Content)...)
+
+	case tea.KeyPressMsg:
+		switch msg.String() {
+		case "esc", "ctrl+c":
+			m.cancelled = true
+			return m, tea.Quit
+		case "enter":
+			return m, tea.Quit
+		case "backspace":
+			if len(m.input) > 0 {
+				m.input = m.input[:len(m.input)-1]
+			}
+		default:
+			if msg.Text != "" {
+				m.input = append(m.input, []rune(msg.Text)...)
+			}
+		}
 	}
-	fmt.Println()
-	return input
+	return m, nil
+}
+
+func (m customInputModel) View() tea.View {
+	w := max(m.width, 1)
+	textWidth := min(w-4, 60)
+
+	instruction := "Welcome to TYOQ. Paste your text below"
+	promptBox := headerStyle.Width(textWidth).Render(instruction)
+
+	preview := string(m.input)
+	if preview == "" {
+		preview = dimStyle.Render("(waiting for input...)")
+	} else {
+		preview = correctStyle.Width(textWidth).Render(preview)
+	}
+
+	footer := footerStyle.Render("enter to confirm · esc to quit")
+
+	body := lipgloss.JoinVertical(lipgloss.Center,
+		promptBox,
+		"",
+		preview,
+		"",
+		footer,
+	)
+	content := lipgloss.PlaceHorizontal(w, lipgloss.Center, body)
+
+	lines := strings.Count(content, "\n") + 1
+	pad := max(m.height-lines, 0)
+
+	v := tea.NewView(content + strings.Repeat("\n", pad))
+	v.AltScreen = true
+	return v
+}
+
+// runCustomInput launches the custom-input screen as its own bubbletea
+// program and returns the text the user entered. Returns "" and exits
+// the process if the user cancels with esc/ctrl+c.
+func runCustomInput() string {
+	p := tea.NewProgram(newCustomInputModel())
+	finalModel, err := p.Run()
+	if err != nil {
+		fmt.Printf("Error: %v\n", err)
+		os.Exit(1)
+	}
+
+	m := finalModel.(customInputModel)
+	if m.cancelled {
+		os.Exit(0)
+	}
+
+	return strings.TrimSpace(string(m.input))
 }
 
 func initialModel() model {
 	isCustom := false
 	customText := ""
-
 	if len(os.Args) > 1 && os.Args[1] == "-i" {
 		isCustom = true
-		customText = readCustomInput()
+		customText = runCustomInput()
 	}
-
 	quotes := loadQuotes()
 	targetText := ""
 	if isCustom {
 		targetText = customText
 	} else if len(quotes) > 0 {
-		targetText = quotes[rand.IntN(len(quotes))]
+		targetText = quotes[0]
 	}
-
 	targetText = strings.Join(strings.Fields(targetText), " ")
-
 	return model{
 		targetText:   targetText,
 		quotes:       quotes,
@@ -151,6 +217,7 @@ func initialModel() model {
 		startTime:    time.Now(),
 		width:        80,
 		height:       24,
+		index:        1,
 	}
 }
 
@@ -163,7 +230,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
-
 	case tea.KeyPressMsg:
 		if m.waitingRestart {
 			switch msg.String() {
@@ -173,11 +239,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m.reset(m.width, m.height), nil
 			}
 		}
-
 		if m.done {
 			return m, nil
 		}
-
 		switch msg.String() {
 		case "esc", "ctrl+c":
 			return m, tea.Quit
@@ -188,10 +252,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				delete(m.errorIndices, m.typed)
 			}
 		default:
-			r := msg.String()
-			if r == "space" {
-				r = " "
+			// Only handle actual character input (letters, space, punctuation, etc).
+			// msg.Text is empty for non-character keys (enter, tab, arrows, ctrl combos,
+			// function keys, etc), so this naturally filters those out instead of
+			// accidentally typing their name (e.g. "enter") into the buffer.
+			if msg.Text == "" {
+				break
 			}
+			r := msg.Text
 			targetRunes := []rune(m.targetText)
 			if m.typed < len(targetRunes) {
 				typedRunes := []rune(r)
@@ -223,10 +291,10 @@ func (m model) reset(width, height int) model {
 	if m.isCustom {
 		targetText = m.customText
 	} else if len(m.quotes) > 0 {
-		targetText = m.quotes[rand.IntN(len(m.quotes))]
+		// wrap around instead of indexing out of bounds once index >= len(quotes)
+		targetText = m.quotes[m.index%len(m.quotes)]
 	}
 	targetText = strings.Join(strings.Fields(targetText), " ")
-
 	return model{
 		targetText:   targetText,
 		quotes:       m.quotes,
@@ -236,6 +304,7 @@ func (m model) reset(width, height int) model {
 		startTime:    time.Now(),
 		width:        width,
 		height:       height,
+		index:        m.index + 1,
 	}
 }
 
@@ -279,9 +348,7 @@ func (m model) renderWrappedText(width, startLine, endLine int) string {
 	if width <= 0 {
 		width = 80
 	}
-
 	var lines []string
-
 	for lineNum := startLine; lineNum < endLine; lineNum++ {
 		start := lineNum * width
 		if start >= len(runes) {
@@ -289,12 +356,10 @@ func (m model) renderWrappedText(width, startLine, endLine int) string {
 		}
 		end := min(start+width, len(runes))
 		var sb strings.Builder
-
 		for i := start; i < end; i++ {
 			ch := runes[i]
 			kind := m.charStyleKind(i)
 			style := m.charStyle(kind)
-
 			if kind == styleError && ch == ' ' && i < len(m.typedChars) {
 				sb.WriteString(style.Render(string(m.typedChars[i])))
 			} else {
@@ -303,7 +368,6 @@ func (m model) renderWrappedText(width, startLine, endLine int) string {
 		}
 		lines = append(lines, sb.String())
 	}
-
 	return strings.Join(lines, "\n")
 }
 
@@ -313,7 +377,6 @@ func (m model) updateScroll() int {
 	totalLines := (len([]rune(m.targetText)) + w - 1) / w
 	visible := m.textLinesVisible()
 	cursorRow := 1
-
 	offset := cursorLine - cursorRow
 	if offset < 0 {
 		offset = 0
@@ -342,28 +405,26 @@ func (m model) View() tea.View {
 	}
 	lines := strings.Count(content, "\n") + 1
 	pad := max(m.height-lines, 0)
-	return tea.NewView(content + strings.Repeat("\n", pad))
+
+	v := tea.NewView(content + strings.Repeat("\n", pad))
+	v.AltScreen = true
+	return v
 }
 
 func (m model) typingView() string {
 	w := max(m.width, 1)
-
 	header := "Let's see how fast you can type!"
 	headerBox := headerStyle.Width(min(w-4, 60)).Render(header)
-
 	wordsTyped := 0
 	if m.typed > 0 && m.typed <= len(m.targetText) {
 		wordsTyped = strings.Count(m.targetText[:m.typed], " ")
 	}
 	totalWords := len(strings.Fields(m.targetText))
 	badge := badgeLabelStyle.Render("words ") + badgeStyle.Render(fmt.Sprintf("%d/%d", wordsTyped, totalWords))
-
 	startLine := m.scrollOffset
 	endLine := startLine + m.textLinesVisible()
 	textContent := m.renderWrappedText(w-2, startLine, endLine)
-
 	footer := footerStyle.Render("esc to quit")
-
 	body := lipgloss.JoinVertical(lipgloss.Center,
 		headerBox,
 		"",
@@ -373,24 +434,24 @@ func (m model) typingView() string {
 		"",
 		footer,
 	)
-
 	return lipgloss.PlaceHorizontal(w, lipgloss.Center, body)
 }
 
 func (m model) resultsView() string {
 	w := max(m.width, 1)
-
 	total := len([]rune(m.targetText))
 	errors := len(m.errorIndices)
-	accuracy := float64(total-errors) / float64(total) * 100
-	timeTaken := m.endTime.Sub(m.startTime).Seconds()
 
-	speedChar := float64(total) / timeTaken * 60
-	speedWord := float64(total) / 5 / timeTaken * 60
+	var accuracy, speedChar, speedWord float64
+	timeTaken := m.endTime.Sub(m.startTime).Seconds()
+	if total > 0 && timeTaken > 0 {
+		accuracy = float64(total-errors) / float64(total) * 100
+		speedChar = float64(total) / timeTaken * 60
+		speedWord = float64(total) / 5 / timeTaken * 60
+	}
 
 	header := "(⌐■_■) These are your results"
 	headerBox := resultHeaderStyle.Width(min(w-4, 60)).Render(header)
-
 	var stats strings.Builder
 	rawLines := []string{
 		fmt.Sprintf("Speed: %.0f wpm", speedWord),
@@ -408,9 +469,7 @@ func (m model) resultsView() string {
 	}
 	boxStyle := resultBoxStyle.Width(contentW + 8).Align(lipgloss.Center)
 	statsBox := boxStyle.Render(stats.String())
-
 	footer := footerStyle.Render("esc to quit · any other key to type again")
-
 	body := lipgloss.JoinVertical(lipgloss.Center,
 		headerBox,
 		"",
@@ -418,7 +477,6 @@ func (m model) resultsView() string {
 		"",
 		footer,
 	)
-
 	return lipgloss.PlaceHorizontal(w, lipgloss.Center, body)
 }
 
