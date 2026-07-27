@@ -44,25 +44,12 @@ func readJSONL(path string) ([]scraper.Quote, error) {
 		if err := json.Unmarshal(line, &quote); err != nil {
 			return nil, fmt.Errorf("unmarshal line: %w", err)
 		}
-		fmt.Println("success")
 		quotes = append(quotes, quote)
 	}
 	if err := scanner.Err(); err != nil {
 		return nil, err
 	}
 	return quotes, nil
-}
-
-func CleanQuotes(fromPath string, toPath string) error {
-	quotes, err := readJSONL(fromPath)
-	if err != nil {
-		return err
-	}
-	for i := range quotes {
-		quotes[i].Text = cleanText(quotes[i].Text)
-	}
-	err = writeJSONL(toPath, quotes)
-	return err
 }
 
 func writeJSONL(path string, quotes []scraper.Quote) error {
@@ -72,19 +59,33 @@ func writeJSONL(path string, quotes []scraper.Quote) error {
 	}
 	defer file.Close()
 
-	writer := bufio.NewWriter(file)
-	defer writer.Flush()
-
-	enc := json.NewEncoder(writer)
-	for _, r := range quotes {
-		if err := enc.Encode(r); err != nil {
-			return fmt.Errorf("encode record: %w", err)
+	encoder := json.NewEncoder(file)
+	for _, q := range quotes {
+		if err := encoder.Encode(q); err != nil {
+			return err
 		}
 	}
 	return nil
 }
 
+func CleanQuotes(fromPath string, toPath string) error {
+	quotes, err := readJSONL(fromPath)
+	cleanedQuotes := []scraper.Quote{}
+	if err != nil {
+		return err
+	}
+	for i := range quotes {
+		quotes[i].Text = cleanText(quotes[i].Text)
+		cleanedQuotes = append(cleanedQuotes, quotes[i])
+	}
+	err = scraper.AppendToJSONL(toPath, cleanedQuotes)
+	return err
+}
+
 func cleanText(source string) string {
+	if source == "" {
+		return ""
+	}
 	if strings.Contains(source, HTMLOPENINGTAG) { // discard if the text contains nested tags <i> <b> <a> etc; no much work to clean"
 		return ""
 	}
@@ -106,7 +107,7 @@ func cleanText(source string) string {
 	for old, new := range oldNew {
 		source = strings.ReplaceAll(source, old, new)
 	}
-	if !strings.Contains(source, `" `) {
+	if len(source) >= 2 && !strings.Contains(source, `" `) {
 		source = source[1 : len(source)-1]
 	}
 
