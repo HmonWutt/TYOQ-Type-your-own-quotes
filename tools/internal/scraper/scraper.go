@@ -224,3 +224,10 @@ func AppendToJSONL(filename string, quotes []Quote) error {
 	}
 	return nil
 }
+
+func splitAndJoin(text string, spliton string, delimiter string) string {
+	var joined string
+	parts := strings.Split(text, spliton)
+	joined = strings.Join(parts, delimiter)
+	return joined
+}
