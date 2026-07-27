@@ -50,8 +50,8 @@ go run ./cmd/typing/main.go -i     # paste your own text
 - [x] Migrate to sqlite 
 - [x] Wire the typing CLI to the database
 - [x] Replace UI with Bubbletea
-- [ ] Clean quotes
-- [ ] Filter quotes by author / category / tag
+- [x] Clean quotes
+- [x] Filter quotes by author & length
 - [ ] Different themes for the CLI
 
 ## License
