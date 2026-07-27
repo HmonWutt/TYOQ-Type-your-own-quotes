@@ -242,7 +242,7 @@ func loadQuotesFiltered(length, author string) []string {
 	var args []any
 
 	if author != "" && author != "Any" {
-		conditions = append(conditions, "author = ?")
+		conditions = append(conditions, "quotes.author like ?")
 		args = append(args, author)
 	}
 	switch length {

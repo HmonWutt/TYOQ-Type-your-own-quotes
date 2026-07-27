@@ -52,22 +52,6 @@ func readJSONL(path string) ([]scraper.Quote, error) {
 	return quotes, nil
 }
 
-func writeJSONL(path string, quotes []scraper.Quote) error {
-	file, err := os.Create(path)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-
-	encoder := json.NewEncoder(file)
-	for _, q := range quotes {
-		if err := encoder.Encode(q); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 func CleanQuotes(fromPath string, toPath string) error {
 	quotes, err := readJSONL(fromPath)
 	cleanedQuotes := []scraper.Quote{}
@@ -75,8 +59,12 @@ func CleanQuotes(fromPath string, toPath string) error {
 		return err
 	}
 	for i := range quotes {
-		quotes[i].Text = cleanText(quotes[i].Text)
-		cleanedQuotes = append(cleanedQuotes, quotes[i])
+		original_quote := quotes[i]
+		cleanText := cleanText(original_quote.Text)
+		if cleanText != "" {
+			original_quote.Text = cleanText
+			cleanedQuotes = append(cleanedQuotes, original_quote)
+		}
 	}
 	err = scraper.AppendToJSONL(toPath, cleanedQuotes)
 	return err
@@ -107,7 +95,7 @@ func cleanText(source string) string {
 	for old, new := range oldNew {
 		source = strings.ReplaceAll(source, old, new)
 	}
-	if len(source) >= 2 && !strings.Contains(source, `" `) {
+	if !strings.Contains(source, `" `) {
 		source = source[1 : len(source)-1]
 	}
 
