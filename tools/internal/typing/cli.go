@@ -35,7 +35,7 @@ var (
 	badgeLabelStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#6C7086"))
 	footerStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#585B70")).Italic(true)
+			Foreground(lipgloss.Color("#DCCCEC")).Italic(true)
 	resultHeaderStyle = lipgloss.NewStyle().
 				Border(lipgloss.RoundedBorder()).
 				BorderForeground(lipgloss.Color("#89B4FA")).
@@ -196,11 +196,16 @@ func runCustomInput() string {
 func initialModel() model {
 	isCustom := false
 	customText := ""
+	var quotes []string
+
 	if len(os.Args) > 1 && os.Args[1] == "-i" {
 		isCustom = true
 		customText = runCustomInput()
+	} else {
+		length, author := runQuoteSelection()
+		quotes = loadQuotesFiltered(length, author)
 	}
-	quotes := loadQuotes()
+
 	targetText := ""
 	if isCustom {
 		targetText = customText
@@ -219,6 +224,238 @@ func initialModel() model {
 		height:       24,
 		index:        1,
 	}
+}
+
+// loadQuotesFiltered loads quotes matching the given length bucket, and
+// author. Pass "Any" (or "") for a filter to skip it.
+func loadQuotesFiltered(length, author string) []string {
+	db, err := sql.Open("sqlite", "../data/seed.db")
+	if err != nil {
+		return nil
+	}
+	defer db.Close()
+
+	const LIMIT = 500
+
+	query := "select text from quotes"
+	var conditions []string
+	var args []any
+
+	if author != "" && author != "Any" {
+		conditions = append(conditions, "author = ?")
+		args = append(args, author)
+	}
+	switch length {
+	case "Short":
+		conditions = append(conditions, "word_count <= 30")
+	case "Medium":
+		conditions = append(conditions, "word_count > 30 and word_count <= 50")
+	case "Long":
+		conditions = append(conditions, "word_count > 50 and word_count <=80")
+	case "Extra Long":
+		conditions = append(conditions, "word_count > 80 and word_count <=100")
+	default:
+		conditions = append(conditions, "")
+	}
+
+	if len(conditions) > 0 {
+		query += " where " + strings.Join(conditions, " and ")
+	}
+	query += fmt.Sprintf(" limit %d", LIMIT)
+
+	rows, err := db.Query(query, args...)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+
+	var quotes []string
+	for rows.Next() {
+		var text string
+		if err := rows.Scan(&text); err != nil {
+			continue
+		}
+		quotes = append(quotes, text)
+	}
+	return quotes
+}
+
+type selectionStep int
+
+const (
+	stepLength selectionStep = iota
+	stepAuthor
+	stepDone
+)
+
+type quoteSelectionModel struct {
+	step      selectionStep
+	cursor    int
+	scroll    int
+	width     int
+	height    int
+	cancelled bool
+
+	lengthOptions []string
+	authorOptions []string
+
+	chosenLength string
+	chosenAuthor string
+}
+
+func newQuoteSelectionModel() quoteSelectionModel {
+	authors := []string{"Any", "Douglas Adams", "Neil Gaiman", "Terry Pratchett"}
+	return quoteSelectionModel{
+		width:         80,
+		height:        24,
+		lengthOptions: []string{"Any", "Short", "Medium", "Long", "Extra Long"},
+		authorOptions: authors,
+	}
+}
+
+func (m quoteSelectionModel) currentOptions() []string {
+	switch m.step {
+	case stepLength:
+		return m.lengthOptions
+	case stepAuthor:
+		return m.authorOptions
+	}
+	return nil
+}
+
+func (m quoteSelectionModel) stepTitle() string {
+	switch m.step {
+	case stepLength:
+		return "Choose a length"
+	case stepAuthor:
+		return "Choose an author"
+	}
+	return ""
+}
+
+// advance moves to the next step, skipping any step that only has "Any".
+func (m quoteSelectionModel) advance() (quoteSelectionModel, tea.Cmd) {
+	m.step++
+	m.cursor = 0
+	m.scroll = 0
+	if m.step < stepDone && len(m.currentOptions()) <= 1 {
+		return m.advance()
+	}
+	if m.step >= stepDone {
+		return m, tea.Quit
+	}
+	return m, nil
+}
+
+func (m quoteSelectionModel) Init() tea.Cmd {
+	return nil
+}
+
+func (m quoteSelectionModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.width = msg.Width
+		m.height = msg.Height
+
+	case tea.KeyPressMsg:
+		switch msg.String() {
+		case "esc", "ctrl+c":
+			m.cancelled = true
+			return m, tea.Quit
+		case "up", "k":
+			if m.cursor > 0 {
+				m.cursor--
+			}
+		case "down", "j":
+			if m.cursor < len(m.currentOptions())-1 {
+				m.cursor++
+			}
+		case "enter":
+			choice := m.currentOptions()[m.cursor]
+			switch m.step {
+			case stepLength:
+				m.chosenLength = choice
+			case stepAuthor:
+				m.chosenAuthor = choice
+			}
+			return m.advance()
+		}
+	}
+	return m, nil
+}
+
+func (m quoteSelectionModel) View() tea.View {
+	w := max(m.width, 1)
+	boxWidth := min(w-4, 60)
+
+	title := headerStyle.Width(boxWidth).Render(m.stepTitle())
+
+	var breadcrumbs []string
+	if m.chosenLength != "" {
+		breadcrumbs = append(breadcrumbs, "Length: "+m.chosenLength)
+	}
+	if m.chosenAuthor != "" {
+		breadcrumbs = append(breadcrumbs, "Author: "+m.chosenAuthor)
+	}
+	trail := dimStyle.Render(strings.Join(breadcrumbs, "  ·  "))
+
+	const visible = 8
+	options := m.currentOptions()
+	if m.cursor < m.scroll {
+		m.scroll = m.cursor
+	}
+	if m.cursor >= m.scroll+visible {
+		m.scroll = m.cursor - visible + 1
+	}
+	end := min(m.scroll+visible, len(options))
+
+	var lines []string
+	for i := m.scroll; i < end; i++ {
+		label := options[i]
+		if i == m.cursor {
+			lines = append(lines, nextStyle.Render("> "+label))
+		} else {
+			lines = append(lines, dimStyle.Render("  "+label))
+		}
+	}
+	list := strings.Join(lines, "\n")
+
+	footer := footerStyle.Render("↑/↓ navigate · enter select · esc quit")
+
+	body := lipgloss.JoinVertical(lipgloss.Center,
+		title,
+		"",
+		trail,
+		"",
+		list,
+		"",
+		footer,
+	)
+	content := lipgloss.PlaceHorizontal(w, lipgloss.Center, body)
+
+	lines2 := strings.Count(content, "\n") + 1
+	pad := max(m.height-lines2, 0)
+
+	v := tea.NewView(content + strings.Repeat("\n", pad))
+	v.AltScreen = true
+	return v
+}
+
+// runQuoteSelection launches the length/tag/author picker and returns the
+// chosen filters. Returns ("", "", "") and exits if the user cancels.
+func runQuoteSelection() (length, author string) {
+	p := tea.NewProgram(newQuoteSelectionModel())
+	finalModel, err := p.Run()
+	if err != nil {
+		fmt.Printf("Error: %v\n", err)
+		os.Exit(1)
+	}
+
+	m := finalModel.(quoteSelectionModel)
+	if m.cancelled {
+		os.Exit(0)
+	}
+	return m.chosenLength, m.chosenAuthor
 }
 
 func (m model) Init() tea.Cmd {
@@ -413,7 +650,7 @@ func (m model) View() tea.View {
 
 func (m model) typingView() string {
 	w := max(m.width, 1)
-	header := "Let's see how fast you can type!"
+	header := "Let's see how fast you type!"
 	headerBox := headerStyle.Width(min(w-4, 60)).Render(header)
 	wordsTyped := 0
 	if m.typed > 0 && m.typed <= len(m.targetText) {
