@@ -28,8 +28,6 @@ type Result struct {
 
 const dbPath = "../data/seed.db"
 
-var jsonlPaths = []string{"fforde.jsonl", "gaiman.jsonl", "adams.jsonl"}
-
 func Insert(db *sql.DB, q *scraper.Quote) (int64, error) {
 	sql := "INSERT INTO quotes (text, author, source, word_count, tags) VALUES (?, ?, ?, ? ,?);"
 	tagsJSON, _ := json.Marshal(q)
@@ -59,7 +57,7 @@ func Seed() {
 		log.Fatal(err)
 	}
 	setupSchema(db)
-	quotes, err := ReadFromFile("../data/fforde.jsonl")
+	quotes, err := ReadFromFile("../data/clean.jsonl")
 	if err != nil {
 		exitIfError(err)
 	}
