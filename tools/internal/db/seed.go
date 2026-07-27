@@ -30,7 +30,7 @@ const dbPath = "../data/seed.db"
 
 func Insert(db *sql.DB, q *scraper.Quote) (int64, error) {
 	sql := "INSERT INTO quotes (text, author, source, word_count, tags) VALUES (?, ?, ?, ? ,?);"
-	tagsJSON, _ := json.Marshal(q)
+	tagsJSON, _ := json.Marshal(q.Tags)
 	result, err := db.Exec(sql, q.Text, q.Author, q.Source, len(strings.Fields(q.Text)), string(tagsJSON))
 	if err != nil {
 		return 0, err
