@@ -129,7 +129,11 @@ func ReadFromFile(filename string) ([]scraper.Quote, error) {
 		if err != nil {
 			return []scraper.Quote{}, fmt.Errorf("failed to parse data: %v", err)
 		}
-		quotes = append(quotes, quote)
+		if quote.Text != "" {
+			quotes = append(quotes, quote)
+		} else {
+			fmt.Println("quote empty: ", quote.Author)
+		}
 	}
 	return quotes, nil
 }

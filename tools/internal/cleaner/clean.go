@@ -61,9 +61,13 @@ func CleanQuotes(fromPath string, toPath string) error {
 	for i := range quotes {
 		original_quote := quotes[i]
 		cleanText := cleanText(original_quote.Text)
+
+		// fmt.Println("clean:\n" + cleanText)
 		if cleanText != "" {
 			original_quote.Text = cleanText
 			cleanedQuotes = append(cleanedQuotes, original_quote)
+		} else {
+			// fmt.Println("empty quote: " + original_quote.Text)
 		}
 	}
 	err = scraper.AppendToJSONL(toPath, cleanedQuotes)
