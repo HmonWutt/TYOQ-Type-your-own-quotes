@@ -129,6 +129,8 @@ func (m customInputModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		case "enter":
 			return m, tea.Quit
+		case "shift+enter":
+			m.input = []rune{}
 		case "backspace":
 			if len(m.input) > 0 {
 				m.input = m.input[:len(m.input)-1]
@@ -156,7 +158,7 @@ func (m customInputModel) View() tea.View {
 		preview = correctStyle.Width(textWidth).Render(preview)
 	}
 
-	footer := footerStyle.Render("enter to confirm · esc to quit")
+	footer := footerStyle.Render("enter to confirm · esc to quit . shift+enter to reset the text")
 
 	body := lipgloss.JoinVertical(lipgloss.Center,
 		promptBox,
@@ -484,6 +486,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg.String() {
 		case "esc", "ctrl+c":
 			return m, tea.Quit
+		case "enter":
+			return m.reset(m.width, m.height), nil
 		case "backspace":
 			if m.typed > 0 {
 				m.typed--
