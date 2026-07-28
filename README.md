@@ -3,7 +3,7 @@
 ![Go 1.26.4](https://img.shields.io/badge/Go-1.26.4+-00ADD8?logo=go&logoColor=white)
 ![License: MIT](https://img.shields.io/badge/license-MIT-green)
 
-A MonkeyType-inspired typing CLI
+A MonkeyType-inspired typing TUI
 
 ## Usage
 
@@ -22,7 +22,7 @@ go run ./cmd/typing/main.go -i     # paste your own text
 
 | Component | Path | Description |
 |-----------|------|-------------|
-| Typing CLI | `tools/internal/typing/`, `tools/cmd/typing` | `Bubbletea TUI` with WPM/accuracy |
+| Typing TUI | `tools/internal/typing/`, `tools/cmd/typing` | `Bubbletea TUI` with WPM/accuracy |
 | Scraper | `tools/internal/scraper/`, `tools/cmd/scraper/` | Scrapes quotes to JSONL |
 | Seed generator | `tools/internal/genseed/`, `tools/cmd/genseed/` | Generates sqlite seed file from JSONL |
 | Database | `data/seed.db` | sqlite3 schema + seed |
@@ -48,11 +48,11 @@ go run ./cmd/typing/main.go -i     # paste your own text
 - [x] Webscraping quotes
 - [x] ~~PostgreSQL database with seed data~~
 - [x] Migrate to sqlite 
-- [x] Wire the typing CLI to the database
+- [x] Wire the typing TUI to the database
 - [x] Replace UI with Bubbletea
 - [x] Clean quotes
 - [x] Filter quotes by author & length
-- [ ] Different themes for the CLI
+- [ ] Different themes for the UI
 
 ## License
 
