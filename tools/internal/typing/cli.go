@@ -48,6 +48,8 @@ var (
 			Padding(1, 3)
 )
 
+const LIMIT = 500
+
 type model struct {
 	targetText     string
 	typed          int
@@ -72,7 +74,6 @@ func loadQuotes() []string {
 		return nil
 	}
 	defer db.Close()
-	const LIMIT = 500
 	queryByLength := fmt.Sprintf("select text from quotes where word_count < %d limit %d", 100, LIMIT)
 	rows, err := db.Query(queryByLength)
 	if err != nil {
@@ -128,6 +129,8 @@ func (m customInputModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		case "enter":
 			return m, tea.Quit
+		case "shift+enter":
+			m.input = []rune{}
 		case "backspace":
 			if len(m.input) > 0 {
 				m.input = m.input[:len(m.input)-1]
@@ -155,7 +158,7 @@ func (m customInputModel) View() tea.View {
 		preview = correctStyle.Width(textWidth).Render(preview)
 	}
 
-	footer := footerStyle.Render("enter to confirm · esc to quit")
+	footer := footerStyle.Render("enter to confirm · esc to quit . shift+enter to reset the text")
 
 	body := lipgloss.JoinVertical(lipgloss.Center,
 		promptBox,
@@ -204,6 +207,10 @@ func initialModel() model {
 	} else {
 		length, author := runQuoteSelection()
 		quotes = loadQuotesFiltered(length, author)
+		for len(quotes) <= 0 {
+			length, author := runQuoteSelection()
+			quotes = loadQuotesFiltered(length, author)
+		}
 	}
 
 	targetText := ""
@@ -234,9 +241,6 @@ func loadQuotesFiltered(length, author string) []string {
 		return nil
 	}
 	defer db.Close()
-
-	const LIMIT = 500
-
 	query := "select text from quotes"
 	var conditions []string
 	var args []any
@@ -482,6 +486,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg.String() {
 		case "esc", "ctrl+c":
 			return m, tea.Quit
+		case "enter":
+			return m.reset(m.width, m.height), nil
 		case "backspace":
 			if m.typed > 0 {
 				m.typed--
@@ -525,11 +531,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m model) reset(width, height int) model {
 	targetText := ""
+	index := 1
 	if m.isCustom {
 		targetText = m.customText
 	} else if len(m.quotes) > 0 {
-		// wrap around instead of indexing out of bounds once index >= len(quotes)
-		targetText = m.quotes[m.index%len(m.quotes)]
+		targetText = m.quotes[m.index]
+		index = (m.index + 1) % len(m.quotes) // wrap around
 	}
 	targetText = strings.Join(strings.Fields(targetText), " ")
 	return model{
@@ -541,7 +548,7 @@ func (m model) reset(width, height int) model {
 		startTime:    time.Now(),
 		width:        width,
 		height:       height,
-		index:        m.index + 1,
+		index:        index,
 	}
 }
 
