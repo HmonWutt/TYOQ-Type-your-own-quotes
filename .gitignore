@@ -10,3 +10,5 @@ todo.md
 archive_seed.sql
 03-query.sql
 data/quotes/*.jsonl
+*_test.go
+_*

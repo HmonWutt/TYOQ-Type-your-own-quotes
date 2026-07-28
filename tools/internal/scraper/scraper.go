@@ -212,14 +212,18 @@ func AppendToJSONL(filename string, quotes []Quote) error {
 	}
 	defer file.Close()
 	for _, quote := range quotes {
-		bytes, _ := json.Marshal(quote)
-		_, err = file.Write(bytes)
+		bytes, err := json.Marshal(quote)
 		if err != nil {
-			return err
-		}
-		_, err = file.Write([]byte("\n"))
-		if err != nil {
-			return err
+			fmt.Println("Fail to marshal")
+		} else {
+			_, err = file.Write(bytes)
+			if err != nil {
+				return err
+			}
+			_, err = file.Write([]byte("\n"))
+			if err != nil {
+				return err
+			}
 		}
 	}
 	return nil
