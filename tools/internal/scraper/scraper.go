@@ -157,20 +157,6 @@ func extractQuoteDivContent(html string) string {
 	return ""
 }
 
-func write(filepath string, quotes []Quote) {
-	file, _ := os.Create(filepath)
-	defer file.Close()
-
-	encoder := json.NewEncoder(file)
-	for _, quote := range quotes {
-		err := encoder.Encode(quote)
-		if err != nil {
-			log.Println("failed to write to file")
-		}
-	}
-	log.Printf("✓ Saved %d quotes\n", len(quotes))
-}
-
 func (s *Scraper) ScrapeAndAppend() error {
 	for i := s.StartIndex; i < s.Offset; i++ {
 		params := map[string]string{}
@@ -186,6 +172,7 @@ func (s *Scraper) ScrapeAndAppend() error {
 		for statusCode == 202 {
 			fiveMinutesOrMore := 5*time.Minute + time.Duration(rand.Intn(5))*time.Minute
 			fmt.Printf("Waiting for %v\n", fiveMinutesOrMore)
+			time.Sleep(fiveMinutesOrMore)
 			statusCode, doc = Scrape(fullURL, s.Referer)
 		}
 		if statusCode == 200 {
@@ -205,7 +192,7 @@ func (s *Scraper) ScrapeAndAppend() error {
 	return nil
 }
 
-func AppendToJSONL(filename string, quotes []Quote) error {
+func AppendToJSONL[T any](filename string, quotes []T) error {
 	file, err := os.OpenFile(filename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 	if err != nil {
 		return err

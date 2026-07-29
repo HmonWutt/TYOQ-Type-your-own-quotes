@@ -1,43 +1,35 @@
-package seed
+package db
 
 import (
 	"bufio"
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"log"
 	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 
-	"github.com/HmonWutt/TYOQ-Type-your-own-quotes/tools/internal/scraper"
+	"github.com/HmonWutt/TYOQ-Type-your-own-quotes/tools/internal/cleaner"
 	_ "modernc.org/sqlite"
 )
 
-type Row struct {
-	text string
-	tags string
-}
-type Result struct {
-	Id        int
-	Text      string
-	Author    string
-	Source    string
-	Tags      string
-	WordCount int
+func seedDBPath() string {
+	_, filename, _, _ := runtime.Caller(0)
+	return filepath.Join(filepath.Dir(filename), "seed.db")
 }
 
-const dbPath = "../data/seed.db"
-
-func Insert(db *sql.DB, q *scraper.Quote) (int64, error) {
-	sql := "INSERT INTO quotes (text, author, source, word_count, tags) VALUES (?, ?, ?, ? ,?);"
+func Insert(db *sql.DB, q *cleaner.CleanQuote) (int64, error) {
+	sql := "INSERT OR IGNORE INTO quotes (text, author, source, word_count, tags) VALUES (?, ?, ?, ? ,?);"
 	tagsJSON, _ := json.Marshal(q.Tags)
-	result, err := db.Exec(sql, q.Text, q.Author, q.Source, len(strings.Fields(q.Text)), string(tagsJSON))
+	authorsJSON, _ := json.Marshal(q.Authors)
+	result, err := db.Exec(sql, q.Text, string(authorsJSON), q.Source, len(strings.Fields(q.Text)), string(tagsJSON))
 	if err != nil {
 		return 0, err
 	}
 	id, err := result.LastInsertId()
 	if err != nil {
-		return 0, nil
+		return 0, err
 	}
 	fmt.Printf(
 		"The quote was inserted with ID:%d\n",
@@ -46,115 +38,100 @@ func Insert(db *sql.DB, q *scraper.Quote) (int64, error) {
 	return id, nil
 }
 
-func Seed() {
+func Seed() error {
 	// connect to the SQLite database
-	db, err := sql.Open("sqlite", dbPath)
+	db, err := sql.Open("sqlite", seedDBPath())
+	if err != nil {
+		return err
+	}
 	defer db.Close()
-	exitIfError(err)
+
 	// Make sure it works.
 	err = db.Ping()
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
-	setupSchema(db)
+	err = setupSchema(db)
+	if err != nil {
+		return err
+	}
 	quotes, err := ReadFromFile("../data/clean.jsonl")
 	if err != nil {
-		exitIfError(err)
+		return err
 	}
-	batchInsert(db, quotes)
+	err = batchInsert(db, quotes)
+	return err
 }
 
-func selectQuote() {
-	// insert the quote
-	// id, err := Insert(db, quote)
-	// if err != nil {
-	// 	fmt.Println(err)
-	// 	return
-	// }
-	// // print the inserted country
-
-	// // var quotes []Row
-	// rows := db.QueryRow("select text,tags from quotes where id=1")
-	//
-	// // defer rows.Close()
-	// // for rows.Next() {
-	// q := &Row{}
-	// err = rows.Scan(&q.text, &q.tags)
-	// if err != nil {
-	// 	fmt.Println(err)
-	// }
-	//
-	// fmt.Println(quote.Tags)
-	// //quotes = append(quotes, *q)
-	// //}
-}
-
-func batchInsert(db *sql.DB, quotes []scraper.Quote) {
+func batchInsert(db *sql.DB, quotes []cleaner.CleanQuote) error {
 	tx, err := db.Begin()
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 
 	defer tx.Rollback()
-	stmt, _ := tx.Prepare(`
-        INSERT INTO quotes (text, author, source, word_count,tags)
+	stmt, err := tx.Prepare(`
+        INSERT OR IGNORE INTO quotes (text, author, source, word_count,tags)
         VALUES (?, ?, ?, ?, ?)
     `)
+	if err != nil {
+		return err
+	}
 	defer stmt.Close()
 
 	for _, q := range quotes {
+		length := len(strings.Fields(q.Text))
+		if length > 200 {
+			continue
+		}
+		authorsJSON, _ := json.Marshal(q.Authors)
 		tagsJSON, _ := json.Marshal(q.Tags)
-		if _, err := stmt.Exec(q.Text, q.Author, q.Source, len(strings.Fields(q.Text)), string(tagsJSON)); err != nil {
-			exitIfError(err)
+		if _, err := stmt.Exec(q.Text, string(authorsJSON), q.Source, length, string(tagsJSON)); err != nil {
+			return err
 		}
 	}
 
 	if err = tx.Commit(); err != nil {
-		exitIfError(err)
+		return err
 	}
+	return nil
 }
 
-func ReadFromFile(filename string) ([]scraper.Quote, error) {
-	var quotes []scraper.Quote
+func ReadFromFile(filename string) ([]cleaner.CleanQuote, error) {
+	var quotes []cleaner.CleanQuote
 	file, err := os.Open(filename)
 	if err != nil {
-		return []scraper.Quote{}, fmt.Errorf("failed to open file: %v", err)
+		return nil, fmt.Errorf("failed to open file: %v", err)
 	}
 	defer file.Close()
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
 		line := scanner.Text()
-		var quote scraper.Quote
+		var quote cleaner.CleanQuote
 		err := json.Unmarshal([]byte(line), &quote)
 		if err != nil {
-			return []scraper.Quote{}, fmt.Errorf("failed to parse data: %v", err)
+			return nil, fmt.Errorf("failed to parse data: %v", err)
 		}
 		if quote.Text != "" {
 			quotes = append(quotes, quote)
 		} else {
-			fmt.Println("quote empty: ", quote.Author)
+			fmt.Println("quote empty: ", quote.Authors)
 		}
 	}
 	return quotes, nil
 }
 
-func exitIfError(err error) {
-	if err != nil {
-		log.Output(2, err.Error())
-		os.Exit(1)
-	}
-}
-
-func setupSchema(db *sql.DB) {
+func setupSchema(db *sql.DB) error {
 	sql := `CREATE TABLE IF NOT EXISTS quotes (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
     text       TEXT NOT NULL,
-    author     TEXT DEFAULT 'Unknown',
+    author     TEXT DEFAULT '[]',
     source     TEXT DEFAULT 'Unknown',
     tags       TEXT DEFAULT '[]',
     word_count INTEGER,
     created_at TEXT DEFAULT (datetime('now'))
-	);`
+	);
+	CREATE UNIQUE INDEX IF NOT EXISTS idx_quotes_text_unique ON quotes(text);`
 	_, err := db.Exec(sql)
-	exitIfError(err)
+	return err
 }
