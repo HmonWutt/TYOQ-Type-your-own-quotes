@@ -9,6 +9,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/HmonWutt/TYOQ-Type-your-own-quotes/tools/internal/db"
 	_ "modernc.org/sqlite"
 )
 
@@ -69,13 +70,17 @@ type model struct {
 }
 
 func loadQuotes() []string {
-	db, err := sql.Open("sqlite", "../data/seed.db")
+	path, err := db.EnsureDB()
 	if err != nil {
 		return nil
 	}
-	defer db.Close()
+	dbConn, err := sql.Open("sqlite", path)
+	if err != nil {
+		return nil
+	}
+	defer dbConn.Close()
 	queryByLength := fmt.Sprintf("select text from quotes where word_count < %d limit %d", 100, LIMIT)
-	rows, err := db.Query(queryByLength)
+	rows, err := dbConn.Query(queryByLength)
 	if err != nil {
 		return nil
 	}
@@ -236,11 +241,15 @@ func initialModel() model {
 // loadQuotesFiltered loads quotes matching the given length bucket, and
 // author. Pass "Any" (or "") for a filter to skip it.
 func loadQuotesFiltered(length, author string) []string {
-	db, err := sql.Open("sqlite", "../data/seed.db")
+	path, err := db.EnsureDB()
 	if err != nil {
 		return nil
 	}
-	defer db.Close()
+	dbConn, err := sql.Open("sqlite", path)
+	if err != nil {
+		return nil
+	}
+	defer dbConn.Close()
 	query := "select text from quotes"
 	var conditions []string
 	var args []any
@@ -267,7 +276,7 @@ func loadQuotesFiltered(length, author string) []string {
 	}
 	query += fmt.Sprintf(" limit %d", LIMIT)
 
-	rows, err := db.Query(query, args...)
+	rows, err := dbConn.Query(query, args...)
 	if err != nil {
 		return nil
 	}
