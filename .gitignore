@@ -1,6 +1,6 @@
 __pycache__
 .env
-.tyoq 
+.tyoq/ 
 readme1.md
 03-query.sql
 config.json
@@ -10,5 +10,8 @@ todo.md
 archive_seed.sql
 03-query.sql
 data/quotes/*.jsonl
+data/seed.db
+data/*.db
+tools/internal/db/seed.db
 *_test.go
 _*
