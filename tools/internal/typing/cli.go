@@ -23,6 +23,7 @@ var (
 	magentaStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#CBA6F7"))
 	yellowStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("#F9E2AF"))
 	redStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("#F38BA8"))
+	greenStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("#A6E3A1"))
 	headerStyle  = lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(lipgloss.Color("#CBA6F7")).
@@ -37,6 +38,11 @@ var (
 			Foreground(lipgloss.Color("#6C7086"))
 	footerStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#DCCCEC")).Italic(true)
+	cardStyle = lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color("#45475A")).
+			Padding(1, 2).
+			Align(lipgloss.Center)
 	resultHeaderStyle = lipgloss.NewStyle().
 				Border(lipgloss.RoundedBorder()).
 				BorderForeground(lipgloss.Color("#89B4FA")).
@@ -47,6 +53,12 @@ var (
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(lipgloss.Color("#45475A")).
 			Padding(1, 3)
+	statLabelStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#6C7086"))
+	hintKeyStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#1E1E2E")).
+			Background(lipgloss.Color("#F5C2E7")).
+			Padding(0, 1).Bold(true)
 )
 
 const LIMIT = 500
@@ -67,34 +79,16 @@ type model struct {
 	height         int
 	scrollOffset   int
 	index          int
+	menuRequested  bool
 }
 
-func loadQuotes() []string {
-	path, err := db.EnsureDB()
-	if err != nil {
-		return nil
-	}
-	dbConn, err := sql.Open("sqlite", path)
-	if err != nil {
-		return nil
-	}
-	defer dbConn.Close()
-	queryByLength := fmt.Sprintf("select text from quotes where word_count < %d limit %d", 100, LIMIT)
-	rows, err := dbConn.Query(queryByLength)
-	if err != nil {
-		return nil
-	}
-	defer rows.Close()
-	var quotes []string
-	for rows.Next() {
-		var text string
-		if err := rows.Scan(&text); err != nil {
-			continue
-		}
-		quotes = append(quotes, text)
-	}
-	return quotes
-}
+// sessionResult communicates what should happen after a typing program exits.
+const (
+	sessionQuit sessionResult = iota
+	sessionMenu
+)
+
+type sessionResult int
 
 type inputPhase int
 
@@ -151,33 +145,32 @@ func (m customInputModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m customInputModel) View() tea.View {
 	w := max(m.width, 1)
-	textWidth := min(w-4, 60)
+	contentW := min(w-4, 64)
 
 	instruction := "Welcome to TYOQ. Paste your text below"
-	promptBox := headerStyle.Width(textWidth).Render(instruction)
+	promptBox := headerStyle.Width(contentW).Render(instruction)
 
 	preview := string(m.input)
 	if preview == "" {
 		preview = dimStyle.Render("(waiting for input...)")
 	} else {
-		preview = correctStyle.Width(textWidth).Render(preview)
+		preview = correctStyle.Render(preview)
 	}
+	previewCard := cardStyle.Width(contentW).Render(preview)
 
-	footer := footerStyle.Render("enter to confirm · esc to quit . shift+enter to reset the text")
+	footer := footerStyle.Render(highlightFooter("enter to confirm · esc to quit · shift+enter to reset the text"))
 
 	body := lipgloss.JoinVertical(lipgloss.Center,
 		promptBox,
 		"",
-		preview,
+		previewCard,
 		"",
 		footer,
 	)
 	content := lipgloss.PlaceHorizontal(w, lipgloss.Center, body)
+	content = padToSize(content, w, max(m.height, 1))
 
-	lines := strings.Count(content, "\n") + 1
-	pad := max(m.height-lines, 0)
-
-	v := tea.NewView(content + strings.Repeat("\n", pad))
+	v := tea.NewView(content)
 	v.AltScreen = true
 	return v
 }
@@ -201,24 +194,9 @@ func runCustomInput() string {
 	return strings.TrimSpace(string(m.input))
 }
 
-func initialModel() model {
-	isCustom := false
-	customText := ""
-	var quotes []string
-
-	if len(os.Args) > 1 && os.Args[1] == "-i" {
-		isCustom = true
-		customText = runCustomInput()
-	} else {
-		length, author := runQuoteSelection()
-		quotes = loadQuotesFiltered(length, author)
-		for len(quotes) <= 0 {
-			length, author := runQuoteSelection()
-			quotes = loadQuotesFiltered(length, author)
-		}
-	}
-
+func initialModel(quotes []string, customText string, isCustom bool) model {
 	targetText := ""
+	index := 1
 	if isCustom {
 		targetText = customText
 	} else if len(quotes) > 0 {
@@ -234,7 +212,7 @@ func initialModel() model {
 		startTime:    time.Now(),
 		width:        80,
 		height:       24,
-		index:        1,
+		index:        index,
 	}
 }
 
@@ -400,9 +378,9 @@ func (m quoteSelectionModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m quoteSelectionModel) View() tea.View {
 	w := max(m.width, 1)
-	boxWidth := min(w-4, 60)
+	contentW := min(w-4, 64)
 
-	title := headerStyle.Width(boxWidth).Render(m.stepTitle())
+	title := headerStyle.Width(contentW).Render(m.stepTitle())
 
 	var breadcrumbs []string
 	if m.chosenLength != "" {
@@ -411,7 +389,8 @@ func (m quoteSelectionModel) View() tea.View {
 	if m.chosenAuthor != "" {
 		breadcrumbs = append(breadcrumbs, "Author: "+m.chosenAuthor)
 	}
-	trail := dimStyle.Render(strings.Join(breadcrumbs, "  ·  "))
+	trail := dimStyle.Width(contentW).Align(lipgloss.Center).
+		Render(strings.Join(breadcrumbs, "  ·  "))
 
 	const visible = 8
 	options := m.currentOptions()
@@ -427,30 +406,31 @@ func (m quoteSelectionModel) View() tea.View {
 	for i := m.scroll; i < end; i++ {
 		label := options[i]
 		if i == m.cursor {
-			lines = append(lines, nextStyle.Render("> "+label))
+			cursor := magentaStyle.Render("❯")
+			text := lipgloss.NewStyle().Foreground(lipgloss.Color("#CDD6F4")).Bold(true).Render(label)
+			lines = append(lines, cursor+"  "+text)
 		} else {
 			lines = append(lines, dimStyle.Render("  "+label))
 		}
 	}
 	list := strings.Join(lines, "\n")
+	listCard := cardStyle.Width(contentW).Render(list)
 
-	footer := footerStyle.Render("↑/↓ navigate · enter select · esc quit")
+	footer := footerStyle.Render(highlightFooter("↑/↓ navigate · enter select · esc quit"))
 
 	body := lipgloss.JoinVertical(lipgloss.Center,
 		title,
 		"",
 		trail,
 		"",
-		list,
+		listCard,
 		"",
 		footer,
 	)
 	content := lipgloss.PlaceHorizontal(w, lipgloss.Center, body)
+	content = padToSize(content, w, max(m.height, 1))
 
-	lines2 := strings.Count(content, "\n") + 1
-	pad := max(m.height-lines2, 0)
-
-	v := tea.NewView(content + strings.Repeat("\n", pad))
+	v := tea.NewView(content)
 	v.AltScreen = true
 	return v
 }
@@ -481,23 +461,35 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
+		return m, tea.ClearScreen
 	case tea.KeyPressMsg:
 		if m.waitingRestart {
 			switch msg.String() {
 			case "esc", "ctrl+c":
 				return m, tea.Quit
+			case "m":
+				m.menuRequested = true
+				return m, tea.Quit
+			case "n":
+				return m.reset(m.width, m.height), tea.ClearScreen
+			case "r":
+				return m.resetSame(m.width, m.height), tea.ClearScreen
 			default:
-				return m.reset(m.width, m.height), nil
+				// any other key types the same quote again
+				return m.resetSame(m.width, m.height), tea.ClearScreen
 			}
 		}
 		if m.done {
 			return m, nil
 		}
 		switch msg.String() {
-		case "esc", "ctrl+c":
+		case "esc":
+			m.menuRequested = true
+			return m, tea.Quit
+		case "ctrl+c":
 			return m, tea.Quit
 		case "enter":
-			return m.reset(m.width, m.height), nil
+			return m.reset(m.width, m.height), tea.ClearScreen
 		case "backspace":
 			if m.typed > 0 {
 				m.typed--
@@ -562,6 +554,21 @@ func (m model) reset(width, height int) model {
 	}
 }
 
+// resetSame restarts the typing model with the same quote (retype).
+func (m model) resetSame(width, height int) model {
+	return model{
+		targetText:   m.targetText,
+		quotes:       m.quotes,
+		customText:   m.customText,
+		isCustom:     m.isCustom,
+		errorIndices: make(map[int]bool),
+		startTime:    time.Now(),
+		width:        width,
+		height:       height,
+		index:        m.index,
+	}
+}
+
 type styleKind int
 
 const (
@@ -597,40 +604,137 @@ func (m model) charStyle(kind styleKind) lipgloss.Style {
 	}
 }
 
-func (m model) renderWrappedText(width, startLine, endLine int) string {
-	runes := []rune(m.targetText)
+// wrapLines splits targetText into visual lines of at most width runes,
+// breaking at word boundaries when possible so words don't split mid-word.
+// Each returned entry is the slice of rune indices belonging to that line.
+func wrapLines(target string, width int) [][]int {
+	runes := []rune(target)
 	if width <= 0 {
 		width = 80
 	}
-	var lines []string
-	for lineNum := startLine; lineNum < endLine; lineNum++ {
-		start := lineNum * width
-		if start >= len(runes) {
-			break
+	if len(runes) == 0 {
+		return [][]int{{}}
+	}
+
+	var lines [][]int
+	var current []int
+
+	flush := func() {
+		lines = append(lines, current)
+		current = nil
+	}
+
+	i := 0
+	for i < len(runes) {
+		// gather a word (run of non-space) or a single space
+		isSpace := runes[i] == ' '
+		j := i
+		for j < len(runes) && (runes[j] == ' ') == isSpace {
+			j++
 		}
-		end := min(start+width, len(runes))
-		var sb strings.Builder
-		for i := start; i < end; i++ {
-			ch := runes[i]
+		token := make([]int, j-i)
+		for k := i; k < j; k++ {
+			token[k-i] = k
+		}
+
+		if len(current)+len(token) <= width {
+			current = append(current, token...)
+		} else {
+			// word longer than a full line: hard-break it across lines
+			if isSpace && len(current) == 0 {
+				// leading space on empty line that doesn't fit: drop it
+			} else if len(token) > width && !isSpace {
+				remaining := token
+				for len(remaining) > 0 {
+					take := width - len(current)
+					if take <= 0 {
+						flush()
+						continue
+					}
+					if take > len(remaining) {
+						take = len(remaining)
+					}
+					current = append(current, remaining[:take]...)
+					remaining = remaining[take:]
+					if len(remaining) > 0 {
+						flush()
+					}
+				}
+			} else {
+				flush()
+				current = append(current, token...)
+			}
+		}
+		i = j
+	}
+	flush()
+	if len(lines) == 0 {
+		lines = append(lines, nil)
+	}
+	return lines
+}
+
+// renderLines renders the given wrapped lines (each a slice of rune indices)
+// applying per-character styling. Each line is padded to width so that
+// shorter lines overwrite stale characters from the previous frame when
+// scrolling.
+func (m model) renderLines(lines [][]int, width int) string {
+	if width <= 0 {
+		width = 80
+	}
+	var out strings.Builder
+	for li, line := range lines {
+		if li > 0 {
+			out.WriteString("\n")
+		}
+		used := 0
+		for _, i := range line {
+			ch := []rune(m.targetText)[i]
 			kind := m.charStyleKind(i)
 			style := m.charStyle(kind)
 			if kind == styleError && ch == ' ' && i < len(m.typedChars) {
-				sb.WriteString(style.Render(string(m.typedChars[i])))
+				out.WriteString(style.Render(string(m.typedChars[i])))
 			} else {
-				sb.WriteString(style.Render(string(ch)))
+				out.WriteString(style.Render(string(ch)))
 			}
+			used++
 		}
-		lines = append(lines, sb.String())
+		if used < width {
+			out.WriteString(strings.Repeat(" ", width-used))
+		}
 	}
-	return strings.Join(lines, "\n")
+	return out.String()
+}
+
+// textWidth is the inner wrap width used for the typing text. It must
+// match the width the text is actually rendered at in typingView so the
+// scroll offset and visible-line count stay in sync with what is drawn.
+func (m model) textWidth() int {
+	w := max(m.width, 1)
+	contentW := min(w-4, 64)
+	return max(contentW, 1)
 }
 
 func (m model) updateScroll() int {
-	w := max(m.width, 1)
-	cursorLine := m.typed / w
-	totalLines := (len([]rune(m.targetText)) + w - 1) / w
+	tw := m.textWidth()
+	lines := wrapLines(m.targetText, tw)
+	totalLines := len(lines)
 	visible := m.textLinesVisible()
-	cursorRow := 1
+	if visible <= 0 {
+		return 0
+	}
+	// find which line the cursor (typed position) is on
+	cursorLine := 0
+	for li, line := range lines {
+		for _, idx := range line {
+			if idx == m.typed {
+				cursorLine = li
+				break
+			}
+		}
+	}
+	// keep cursor on the second visible row when possible
+	cursorRow := min(1, visible-1)
 	offset := cursorLine - cursorRow
 	if offset < 0 {
 		offset = 0
@@ -645,9 +749,23 @@ func (m model) updateScroll() int {
 	return offset
 }
 
+// textLinesVisible returns how many wrapped text lines can be shown at
+// once. It is capped at 3 but also reduced so the total typing-view
+// height (header, badge, bar, text, footer) fits within the terminal
+// height, which prevents the alt screen from scrolling and exposing
+// previous frames.
 func (m model) textLinesVisible() int {
-	totalLines := (len([]rune(m.targetText)) + max(m.width, 1) - 1) / max(m.width, 1)
-	return min(3, totalLines)
+	const maxVisible = 3
+	// chrome lines: header box (3 with border), badge (1), bar (1),
+	// footer (1), plus blank separators between sections (5).
+	const chrome = 12
+	avail := m.height - chrome
+	if avail < 1 {
+		avail = 1
+	}
+	visible := min(maxVisible, avail)
+	totalLines := len(wrapLines(m.targetText, m.textWidth()))
+	return min(visible, totalLines)
 }
 
 func (m model) View() tea.View {
@@ -657,34 +775,83 @@ func (m model) View() tea.View {
 	} else {
 		content = m.typingView()
 	}
-	lines := strings.Count(content, "\n") + 1
-	pad := max(m.height-lines, 0)
 
-	v := tea.NewView(content + strings.Repeat("\n", pad))
+	// Force every frame to be a solid w×h block so the renderer fully
+	// overwrites the previous frame. This prevents stale characters from
+	// a previous (possibly differently-sized) frame lingering after a
+	// resize or quote change.
+	w := max(m.width, 1)
+	h := max(m.height, 1)
+	content = padToSize(content, w, h)
+
+	v := tea.NewView(content)
 	v.AltScreen = true
 	return v
 }
 
+// padToSize ensures s fills exactly width×height cells: each line is
+// padded/truncated to width, the line count is padded to height.
+func padToSize(s string, width, height int) string {
+	lines := strings.Split(s, "\n")
+	for i, line := range lines {
+		lw := lipgloss.Width(line)
+		if lw < width {
+			lines[i] = line + strings.Repeat(" ", width-lw)
+		}
+	}
+	for len(lines) < height {
+		lines = append(lines, strings.Repeat(" ", width))
+	}
+	if len(lines) > height {
+		lines = lines[:height]
+	}
+	return strings.Join(lines, "\n")
+}
+
 func (m model) typingView() string {
 	w := max(m.width, 1)
+	contentW := min(w-4, 64)
+
 	header := "Let's see how fast you type!"
-	headerBox := headerStyle.Width(min(w-4, 60)).Render(header)
+	headerBox := headerStyle.Width(contentW).Render(header)
+
 	wordsTyped := 0
 	if m.typed > 0 && m.typed <= len(m.targetText) {
 		wordsTyped = strings.Count(m.targetText[:m.typed], " ")
 	}
 	totalWords := len(strings.Fields(m.targetText))
-	badge := badgeLabelStyle.Render("words ") + badgeStyle.Render(fmt.Sprintf("%d/%d", wordsTyped, totalWords))
+	if totalWords <= 0 {
+		totalWords = 1
+	}
+	// badge := badgeLabelStyle.Render("words ") +
+	// 	badgeStyle.Render(fmt.Sprintf("%d/%d", wordsTyped, totalWords))
+	bar := progressBar(wordsTyped, totalWords, min(contentW-4, 40))
+
+	allLines := wrapLines(m.targetText, m.textWidth())
 	startLine := m.scrollOffset
 	endLine := startLine + m.textLinesVisible()
-	textContent := m.renderWrappedText(w-2, startLine, endLine)
-	footer := footerStyle.Render("esc to quit")
+	if startLine > len(allLines) {
+		startLine = len(allLines)
+	}
+	if endLine > len(allLines) {
+		endLine = len(allLines)
+	}
+	if endLine < startLine {
+		endLine = startLine
+	}
+	textContent := m.renderLines(allLines[startLine:endLine], m.textWidth())
+
+	footer := footerStyle.Width(w).Align(lipgloss.Center).
+		Render(highlightFooter("enter next quote · esc back to menu · ctrl+c quit"))
 	body := lipgloss.JoinVertical(lipgloss.Center,
 		headerBox,
 		"",
-		badge,
+		// badge,
+		// "",
+		bar,
 		"",
 		textContent,
+		"",
 		"",
 		footer,
 	)
@@ -693,6 +860,7 @@ func (m model) typingView() string {
 
 func (m model) resultsView() string {
 	w := max(m.width, 1)
+	contentW := min(w-4, 64)
 	total := len([]rune(m.targetText))
 	errors := len(m.errorIndices)
 
@@ -705,25 +873,26 @@ func (m model) resultsView() string {
 	}
 
 	header := "(⌐■_■) These are your results"
-	headerBox := resultHeaderStyle.Width(min(w-4, 60)).Render(header)
-	var stats strings.Builder
-	rawLines := []string{
-		fmt.Sprintf("Speed: %.0f wpm", speedWord),
-		fmt.Sprintf("Speed: %.0f cpm", speedChar),
-		fmt.Sprintf("Accuracy: %.0f%%", accuracy),
+	headerBox := resultHeaderStyle.Width(contentW).Render(header)
+
+	// stat rows: label left, value right, inside a bordered card
+	statRow := func(label, value string, vStyle lipgloss.Style) string {
+		labelRender := statLabelStyle.Render(label)
+		valueRender := vStyle.Render(value)
+		gap := max(contentW-16-unisafewidth(label)-unisafewidth(value), 1)
+		return labelRender + strings.Repeat(" ", gap) + valueRender
 	}
-	styles := []lipgloss.Style{blueStyle, magentaStyle, yellowStyle}
-	contentW := 24
-	for i, l := range rawLines {
-		left := (contentW - len(l)) / 2
-		right := contentW - len(l) - left
-		padded := strings.Repeat(" ", left) + l + strings.Repeat(" ", right)
-		stats.WriteString(styles[i].Render(padded))
-		stats.WriteString("\n")
-	}
-	boxStyle := resultBoxStyle.Width(contentW + 8).Align(lipgloss.Center)
-	statsBox := boxStyle.Render(stats.String())
-	footer := footerStyle.Render("esc to quit · any other key to type again")
+	rows := strings.Join([]string{
+		statRow("Speed", fmt.Sprintf("%.0f wpm", speedWord), blueStyle),
+		statRow("Speed", fmt.Sprintf("%.0f cpm", speedChar), magentaStyle),
+		statRow("Accuracy", fmt.Sprintf("%.0f%%", accuracy), yellowStyle),
+		statRow("Errors", fmt.Sprintf("%d / %d", errors, total), redStyle),
+		statRow("Time", fmt.Sprintf("%.1fs", timeTaken), greenStyle),
+	}, "\n")
+	statsBox := cardStyle.Width(contentW).Render(rows)
+
+	footer := footerStyle.Width(w).Align(lipgloss.Center).
+		Render(highlightFooter("r retype same · n next quote · m menu · esc quit"))
 	body := lipgloss.JoinVertical(lipgloss.Center,
 		headerBox,
 		"",
@@ -734,10 +903,91 @@ func (m model) resultsView() string {
 	return lipgloss.PlaceHorizontal(w, lipgloss.Center, body)
 }
 
+// unisafewidth returns the display width of s ignoring ANSI escapes.
+// lipgloss.Width does this too, but we need it for raw strings before
+// they get styled. Falls back to rune count.
+func unisafewidth(s string) int {
+	return lipgloss.Width(s)
+}
+
+// highlightFooter renders a "key1 desc1 · key2 desc2 · ..." footer string
+// with each key highlighted via hintKeyStyle and the rest in footerStyle.
+func highlightFooter(s string) string {
+	parts := strings.Split(s, " · ")
+	var rendered []string
+	for _, p := range parts {
+		fields := strings.SplitN(p, " ", 2)
+		if len(fields) == 2 {
+			rendered = append(rendered,
+				hintKeyStyle.Render(fields[0])+" "+
+					footerStyle.Render(fields[1]))
+		} else {
+			rendered = append(rendered, footerStyle.Render(p))
+		}
+	}
+	return strings.Join(rendered, " "+dimStyle.Render("·")+" ")
+}
+
+// progressBar renders a labelled progress bar of the given width.
+func progressBar(current, total, width int) string {
+	if total <= 0 {
+		total = 1
+	}
+	if width < 10 {
+		width = 10
+	}
+	pct := float64(current) / float64(total)
+	if pct < 0 {
+		pct = 0
+	} else if pct > 1 {
+		pct = 1
+	}
+	filled := int(pct * float64(width))
+	if filled > width {
+		filled = width
+	}
+	bar := greenStyle.Render(strings.Repeat("▄", filled)) +
+		strings.Repeat(" ", width-filled)
+	return bar
+}
+
 func Type() {
-	p := tea.NewProgram(initialModel())
-	if _, err := p.Run(); err != nil {
-		fmt.Printf("Error: %v\n", err)
-		os.Exit(1)
+	isCustom := len(os.Args) > 1 && os.Args[1] == "-i"
+
+	for {
+		quotes, customText := launchSelection(isCustom)
+		if len(quotes) == 0 && customText == "" {
+			return
+		}
+
+		m := initialModel(quotes, customText, isCustom)
+		p := tea.NewProgram(m)
+		finalModel, err := p.Run()
+		if err != nil {
+			fmt.Printf("Error: %v\n", err)
+			os.Exit(1)
+		}
+
+		result := finalModel.(model)
+		if result.menuRequested {
+			continue
+		}
+		return
+	}
+}
+
+// launchSelection runs the appropriate selection screen (custom input or
+// quote picker) and returns the quotes/customText to type. Returns empty
+// values if the user cancelled.
+func launchSelection(isCustom bool) (quotes []string, customText string) {
+	if isCustom {
+		return nil, runCustomInput()
+	}
+	for {
+		length, author := runQuoteSelection()
+		quotes = loadQuotesFiltered(length, author)
+		if len(quotes) > 0 {
+			return quotes, ""
+		}
 	}
 }
