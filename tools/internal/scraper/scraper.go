@@ -3,7 +3,6 @@ package scraper
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"math/rand"
 	"net/http"
 	"net/url"
@@ -33,14 +32,11 @@ type (
 	}
 )
 
-func Check(e error) {
-	if e != nil {
-		log.Fatal(e)
+func makeFullURL(baseURL string, params map[string]string) (string, error) {
+	u, err := url.Parse(baseURL)
+	if err != nil {
+		return "", err
 	}
-}
-
-func makeFullURL(baseURL string, params map[string]string) string {
-	u, _ := url.Parse(baseURL)
 
 	q := u.Query()
 	q.Set("commit", "Search")
@@ -51,13 +47,13 @@ func makeFullURL(baseURL string, params map[string]string) string {
 
 	u.RawQuery = q.Encode()
 	// fmt.Println(u.String())
-	return u.String()
+	return u.String(), nil
 }
 
-func Scrape(url string, referer string) (int, *goquery.Document) {
+func Scrape(url string, referer string) (int, *goquery.Document, error) {
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
-		log.Fatal(err)
+		return 500, nil, err
 	}
 	req.Header.Set("referer", referer)
 	req.Header.Set("User-Agent", randomUserAgent())
@@ -69,32 +65,22 @@ func Scrape(url string, referer string) (int, *goquery.Document) {
 		Timeout: 600 * time.Second,
 	}
 	res, err := client.Do(req)
-	Check(err)
+	if err != nil {
+		return 500, nil, err
+	}
 	defer res.Body.Close()
 	if res.StatusCode == 200 {
 		doc, err := goquery.NewDocumentFromReader(res.Body)
-		Check(err)
-		return res.StatusCode, doc
+		if err != nil {
+			return 500, nil, err
+		}
+		return res.StatusCode, doc, nil
 	}
 	if res.StatusCode == 202 {
-		return res.StatusCode, nil
+		return res.StatusCode, nil, nil
 	}
-	log.Fatalf("status code error: %d %s", res.StatusCode, res.Status)
-	return res.StatusCode, nil
+	return res.StatusCode, nil, nil
 }
-
-// func ScrapeAllPagesAndWriteToFile(baseURL string, path string) {
-// 	totalPages := 100
-// 	var allQuotes []Quote
-// 	for i := 1; i < totalPages+1; i++ {
-// 		query := fmt.Sprintf("?page=%d", i)
-// 		URL := baseURL + query
-// 		quotes := Scrape(URL, "")
-// 		allQuotes = append(allQuotes, quotes...)
-// 		time.Sleep(2 * time.Second)
-// 	}
-// 	write(path, allQuotes)
-// }
 
 func MakeQuotes(doc *goquery.Document) []Quote {
 	var quotes []Quote
@@ -164,16 +150,24 @@ func (s *Scraper) ScrapeAndAppend() error {
 		if i > 1 {
 			params["page"] = fmt.Sprintf("%d", i)
 		}
-		fullURL := makeFullURL(s.BaseURL, params)
-
+		fullURL, err := makeFullURL(s.BaseURL, params)
+		if err != nil {
+			return err
+		}
 		fmt.Printf("Scraping: %s\n", fullURL)
-		statusCode, doc := Scrape(fullURL, s.Referer)
+		statusCode, doc, err := Scrape(fullURL, s.Referer)
+		if err != nil {
+			return err
+		}
 		fmt.Printf("StatusCode: %d\n", statusCode)
 		for statusCode == 202 {
 			fiveMinutesOrMore := 5*time.Minute + time.Duration(rand.Intn(5))*time.Minute
 			fmt.Printf("Waiting for %v\n", fiveMinutesOrMore)
 			time.Sleep(fiveMinutesOrMore)
-			statusCode, doc = Scrape(fullURL, s.Referer)
+			statusCode, doc, err = Scrape(fullURL, s.Referer)
+			if err != nil {
+				return err
+			}
 		}
 		if statusCode == 200 {
 			s.Referer = fullURL
@@ -201,7 +195,7 @@ func AppendToJSONL[T any](filename string, quotes []T) error {
 	for _, quote := range quotes {
 		bytes, err := json.Marshal(quote)
 		if err != nil {
-			fmt.Println("Fail to marshal")
+			return err
 		} else {
 			_, err = file.Write(bytes)
 			if err != nil {
