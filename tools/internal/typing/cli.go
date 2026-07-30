@@ -255,7 +255,8 @@ func loadQuotesFiltered(length, author string) []string {
 	var args []any
 
 	if author != "" && author != "Any" {
-		conditions = append(conditions, "quotes.author like ?")
+		conditions = append(conditions, "quotes.author LIKE ?")
+		author = fmt.Sprintf("%%%s%%", author)
 		args = append(args, author)
 	}
 	switch length {
@@ -268,7 +269,7 @@ func loadQuotesFiltered(length, author string) []string {
 	case "Extra Long":
 		conditions = append(conditions, "word_count > 80 and word_count <=100")
 	default:
-		conditions = append(conditions, "")
+		conditions = append(conditions, "word_count > 0")
 	}
 
 	if len(conditions) > 0 {
