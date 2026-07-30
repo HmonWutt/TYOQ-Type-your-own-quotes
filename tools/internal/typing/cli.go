@@ -20,16 +20,15 @@ var (
 			Background(lipgloss.Color("#45475A")).Bold(true)
 	dimStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("#585B70"))
 	blueStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("#89B4FA")).Bold(true)
-	magentaStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#CBA6F7"))
+	magentaStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#A6E3A1"))
 	yellowStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("#F9E2AF"))
 	redStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("#F38BA8"))
 	greenStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("#A6E3A1"))
+	whiteStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("#FFFFFF"))
 	headerStyle  = lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color("#CBA6F7")).
 			Padding(1, 3).
 			Align(lipgloss.Center).
-			Foreground(lipgloss.Color("#F5C2E7")).Bold(true)
+			Foreground(lipgloss.Color("#A6E3A1")).Bold(true)
 	badgeStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#1E1E2E")).
 			Background(lipgloss.Color("#F9E2AF")).
@@ -37,31 +36,30 @@ var (
 	badgeLabelStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#6C7086"))
 	footerStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#DCCCEC")).Italic(true)
+			Foreground(lipgloss.Color("#DCCCEC"))
 	cardStyle = lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color("#45475A")).
 			Padding(1, 2).
 			Align(lipgloss.Center)
 	resultHeaderStyle = lipgloss.NewStyle().
-				Border(lipgloss.RoundedBorder()).
-				BorderForeground(lipgloss.Color("#89B4FA")).
 				Padding(1, 3).
 				Align(lipgloss.Center).
 				Foreground(lipgloss.Color("#89DCEB")).Bold(true)
 	resultBoxStyle = lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color("#45475A")).
 			Padding(1, 3)
 	statLabelStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#6C7086"))
 	hintKeyStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#1E1E2E")).
-			Background(lipgloss.Color("#F5C2E7")).
+			Background(lipgloss.Color("#A6E3A1")).
 			Padding(0, 1).Bold(true)
 )
 
 const LIMIT = 500
+
+const (
+	footerSep = "❖"
+	statsSep  = "➮"
+)
 
 type model struct {
 	targetText     string
@@ -158,7 +156,7 @@ func (m customInputModel) View() tea.View {
 	}
 	previewCard := cardStyle.Width(contentW).Render(preview)
 
-	footer := footerStyle.Render(highlightFooter("enter to confirm · esc to quit · shift+enter to reset the text"))
+	footer := footerStyle.Padding(1, 1).Margin(1, 1).Render(highlightFooter("enter to confirm · esc to quit · shift+enter to reset the text"))
 
 	body := lipgloss.JoinVertical(lipgloss.Center,
 		promptBox,
@@ -318,7 +316,7 @@ func (m quoteSelectionModel) currentOptions() []string {
 func (m quoteSelectionModel) stepTitle() string {
 	switch m.step {
 	case stepLength:
-		return "Choose a length"
+		return "Choose length of quotes"
 	case stepAuthor:
 		return "Choose an author"
 	}
@@ -348,10 +346,20 @@ func (m quoteSelectionModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
+		return m, tea.ClearScreen
 
 	case tea.KeyPressMsg:
 		switch msg.String() {
-		case "esc", "ctrl+c":
+		case "ctrl+c":
+			m.cancelled = true
+			return m, tea.Quit
+		case "esc":
+			if m.step == stepAuthor {
+				m.step = stepLength
+				m.cursor = 0
+				m.scroll = 0
+				return m, tea.ClearScreen
+			}
 			m.cancelled = true
 			return m, tea.Quit
 		case "up", "k":
@@ -370,7 +378,8 @@ func (m quoteSelectionModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case stepAuthor:
 				m.chosenAuthor = choice
 			}
-			return m.advance()
+			m, cmd := m.advance()
+			return m, tea.Batch(cmd, tea.ClearScreen)
 		}
 	}
 	return m, nil
@@ -389,8 +398,8 @@ func (m quoteSelectionModel) View() tea.View {
 	if m.chosenAuthor != "" {
 		breadcrumbs = append(breadcrumbs, "Author: "+m.chosenAuthor)
 	}
-	trail := dimStyle.Width(contentW).Align(lipgloss.Center).
-		Render(strings.Join(breadcrumbs, "  ·  "))
+	trail := whiteStyle.Width(contentW).Align(lipgloss.Center).
+		Render(strings.Join(breadcrumbs, "  "+footerSep+"  "))
 
 	const visible = 8
 	options := m.currentOptions()
@@ -406,8 +415,11 @@ func (m quoteSelectionModel) View() tea.View {
 	for i := m.scroll; i < end; i++ {
 		label := options[i]
 		if i == m.cursor {
-			cursor := magentaStyle.Render("❯")
-			text := lipgloss.NewStyle().Foreground(lipgloss.Color("#CDD6F4")).Bold(true).Render(label)
+			cursor := greenStyle.Bold(true).Render("❯")
+			text := lipgloss.NewStyle().
+				Foreground(lipgloss.Color("#A6E3A1")).
+				Bold(true).
+				Render(label)
 			lines = append(lines, cursor+"  "+text)
 		} else {
 			lines = append(lines, dimStyle.Render("  "+label))
@@ -416,7 +428,11 @@ func (m quoteSelectionModel) View() tea.View {
 	list := strings.Join(lines, "\n")
 	listCard := cardStyle.Width(contentW).Render(list)
 
-	footer := footerStyle.Render(highlightFooter("↑/↓ navigate · enter select · esc quit"))
+	footerText := "↑/↓ navigate · enter select · esc quit"
+	if m.step == stepAuthor {
+		footerText = "↑/↓ navigate · enter select · esc back · ctrl+c quit"
+	}
+	footer := footerStyle.Padding(1, 1).Margin(1, 1).Width(w).Align(lipgloss.Center).Render(highlightFooter(footerText))
 
 	body := lipgloss.JoinVertical(lipgloss.Center,
 		title,
@@ -474,6 +490,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m.reset(m.width, m.height), tea.ClearScreen
 			case "r":
 				return m.resetSame(m.width, m.height), tea.ClearScreen
+			case "up", "down", "left", "right", "pgup", "pgdown", "home", "end":
+				// ignore navigation keys (mouse wheel) on the results page
+				return m, nil
 			default:
 				// any other key types the same quote again
 				return m.resetSame(m.width, m.height), tea.ClearScreen
@@ -711,8 +730,8 @@ func (m model) renderLines(lines [][]int, width int) string {
 // scroll offset and visible-line count stay in sync with what is drawn.
 func (m model) textWidth() int {
 	w := max(m.width, 1)
-	contentW := min(w-4, 64)
-	return max(contentW, 1)
+	contentW := max(w*70/100, 1)
+	return contentW
 }
 
 func (m model) updateScroll() int {
@@ -755,10 +774,10 @@ func (m model) updateScroll() int {
 // height, which prevents the alt screen from scrolling and exposing
 // previous frames.
 func (m model) textLinesVisible() int {
-	const maxVisible = 3
-	// chrome lines: header box (3 with border), badge (1), bar (1),
-	// footer (1), plus blank separators between sections (5).
-	const chrome = 12
+	const maxVisible = 6
+	// chrome lines: header (1), bar (1), footer (1),
+	// plus blank separators between sections (5).
+	const chrome = 8
 	avail := m.height - chrome
 	if avail < 1 {
 		avail = 1
@@ -810,7 +829,7 @@ func padToSize(s string, width, height int) string {
 
 func (m model) typingView() string {
 	w := max(m.width, 1)
-	contentW := min(w-4, 64)
+	contentW := max(w*70/100, 1)
 
 	header := "Let's see how fast you type!"
 	headerBox := headerStyle.Width(contentW).Render(header)
@@ -825,7 +844,8 @@ func (m model) typingView() string {
 	}
 	// badge := badgeLabelStyle.Render("words ") +
 	// 	badgeStyle.Render(fmt.Sprintf("%d/%d", wordsTyped, totalWords))
-	bar := progressBar(wordsTyped, totalWords, min(contentW-4, 40))
+	bar := lipgloss.PlaceHorizontal(contentW, lipgloss.Center,
+		progressBar(wordsTyped, totalWords, min(contentW-4, 50)))
 
 	allLines := wrapLines(m.targetText, m.textWidth())
 	startLine := m.scrollOffset
@@ -841,14 +861,13 @@ func (m model) typingView() string {
 	}
 	textContent := m.renderLines(allLines[startLine:endLine], m.textWidth())
 
-	footer := footerStyle.Width(w).Align(lipgloss.Center).
+	footer := footerStyle.Padding(1, 1).Margin(1, 1).Width(w).Align(lipgloss.Center).
 		Render(highlightFooter("enter next quote · esc back to menu · ctrl+c quit"))
 	body := lipgloss.JoinVertical(lipgloss.Center,
 		headerBox,
-		"",
+		bar,
 		// badge,
 		// "",
-		bar,
 		"",
 		textContent,
 		"",
@@ -864,11 +883,10 @@ func (m model) resultsView() string {
 	total := len([]rune(m.targetText))
 	errors := len(m.errorIndices)
 
-	var accuracy, speedChar, speedWord float64
+	var accuracy, speedWord float64
 	timeTaken := m.endTime.Sub(m.startTime).Seconds()
 	if total > 0 && timeTaken > 0 {
 		accuracy = float64(total-errors) / float64(total) * 100
-		speedChar = float64(total) / timeTaken * 60
 		speedWord = float64(total) / 5 / timeTaken * 60
 	}
 
@@ -877,22 +895,20 @@ func (m model) resultsView() string {
 
 	// stat rows: label left, value right, inside a bordered card
 	statRow := func(label, value string, vStyle lipgloss.Style) string {
-		labelRender := statLabelStyle.Render(label)
+		labelRender := whiteStyle.Render(label)
 		valueRender := vStyle.Render(value)
-		gap := max(contentW-16-unisafewidth(label)-unisafewidth(value), 1)
-		return labelRender + strings.Repeat(" ", gap) + valueRender
+		// gap := max(contentW-16-unisafewidth(label)-unisafewidth(value), 1)
+		return labelRender + strings.Repeat(" ", 1) + valueRender
 	}
 	rows := strings.Join([]string{
-		statRow("Speed", fmt.Sprintf("%.0f wpm", speedWord), blueStyle),
-		statRow("Speed", fmt.Sprintf("%.0f cpm", speedChar), magentaStyle),
-		statRow("Accuracy", fmt.Sprintf("%.0f%%", accuracy), yellowStyle),
-		statRow("Errors", fmt.Sprintf("%d / %d", errors, total), redStyle),
-		statRow("Time", fmt.Sprintf("%.1fs", timeTaken), greenStyle),
+		statRow("Speed", fmt.Sprintf("%s %.0f wpm\n", footerSep, speedWord), greenStyle),
+		statRow("Accuracy", fmt.Sprintf("%s %.0f%%\n", footerSep, accuracy), greenStyle),
+		statRow("Time", fmt.Sprintf("%s %.1fs", footerSep, timeTaken), greenStyle),
 	}, "\n")
-	statsBox := cardStyle.Width(contentW).Render(rows)
+	statsBox := cardStyle.Width(contentW).Align(lipgloss.Center).Render(rows)
 
-	footer := footerStyle.Width(w).Align(lipgloss.Center).
-		Render(highlightFooter("r retype same · n next quote · m menu · esc quit"))
+	footer := greenStyle.Padding(1, 1).Margin(1, 1).Width(w).Align(lipgloss.Center).
+		Render(highlightFooter("r repeat · n next quote · m menu · esc quit"))
 	body := lipgloss.JoinVertical(lipgloss.Center,
 		headerBox,
 		"",
@@ -925,7 +941,7 @@ func highlightFooter(s string) string {
 			rendered = append(rendered, footerStyle.Render(p))
 		}
 	}
-	return strings.Join(rendered, " "+dimStyle.Render("·")+" ")
+	return strings.Join(rendered, " "+dimStyle.Render(footerSep)+" ")
 }
 
 // progressBar renders a labelled progress bar of the given width.
@@ -946,13 +962,15 @@ func progressBar(current, total, width int) string {
 	if filled > width {
 		filled = width
 	}
-	bar := greenStyle.Render(strings.Repeat("▄", filled)) +
-		strings.Repeat(" ", width-filled)
+	bar := greenStyle.Render(strings.Repeat("▁", filled)) +
+		whiteStyle.Render(strings.Repeat("▁", width-filled))
 	return bar
 }
 
 func Type() {
 	isCustom := len(os.Args) > 1 && os.Args[1] == "-i"
+
+	runWelcome()
 
 	for {
 		quotes, customText := launchSelection(isCustom)
@@ -990,4 +1008,95 @@ func launchSelection(isCustom bool) (quotes []string, customText string) {
 			return quotes, ""
 		}
 	}
+}
+
+type welcomeModel struct {
+	width    int
+	height   int
+	progress int // 0..100
+	done     bool
+}
+
+type tickMsg time.Time
+
+func newWelcomeModel() welcomeModel {
+	return welcomeModel{width: 80, height: 24}
+}
+
+func (m welcomeModel) Init() tea.Cmd {
+	return tea.Tick(30*time.Millisecond, func(t time.Time) tea.Msg {
+		return tickMsg(t)
+	})
+}
+
+func (m welcomeModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.width = msg.Width
+		m.height = msg.Height
+	case tickMsg:
+		m.progress += 5
+		if m.progress >= 100 {
+			m.progress = 100
+			m.done = true
+			return m, tea.Quit
+		}
+		return m, tea.Tick(30*time.Millisecond, func(t time.Time) tea.Msg {
+			return tickMsg(t)
+		})
+	case tea.KeyPressMsg:
+		switch msg.String() {
+		case "esc", "ctrl+c":
+			os.Exit(0)
+		default:
+			m.progress = 100
+			m.done = true
+			return m, tea.Quit
+		}
+	}
+	return m, nil
+}
+
+const tyoqBanner = `
+$$$$$$$$\ $$\     $$\  $$$$$$\   $$$$$$\  
+\__$$  __|\$$\   $$  |$$  __$$\ $$  __$$\ 
+   $$ |    \$$\ $$  / $$ /  $$ |$$ /  $$ |
+   $$ |     \$$$$  /  $$ |  $$ |$$ |  $$ |
+   $$ |      \$$  /   $$ |  $$ |$$ |  $$ |
+   $$ |       $$ |    $$ |  $$ |$$ $$\$$ |
+   $$ |       $$ |     $$$$$$  |\$$$$$$ / 
+   \__|       \__|     \______/  \___$$$\ 
+                                     \___|`
+
+func (m welcomeModel) View() tea.View {
+	w := max(m.width, 1)
+	contentW := min(w-4, 64)
+
+	banner := magentaStyle.Width(contentW).Align(lipgloss.Center).Render(tyoqBanner)
+	bar := progressBar(m.progress, 100, min(contentW-4, 40))
+
+	body := lipgloss.JoinVertical(lipgloss.Center,
+		banner,
+		"",
+		bar,
+	)
+	content := lipgloss.PlaceHorizontal(w, lipgloss.Center, body)
+	content = padToSize(content, w, max(m.height, 1))
+
+	v := tea.NewView(content)
+	v.AltScreen = true
+	return v
+}
+
+// runWelcome shows the welcome screen with a loading progress bar and
+// blocks until the bar completes or the user presses a key
+// (esc/ctrl+c exits the process).
+func runWelcome() {
+	p := tea.NewProgram(newWelcomeModel())
+	finalModel, err := p.Run()
+	if err != nil {
+		fmt.Printf("Error: %v\n", err)
+		os.Exit(1)
+	}
+	_ = finalModel
 }
