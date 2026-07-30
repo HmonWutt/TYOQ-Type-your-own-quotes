@@ -13,6 +13,17 @@ import (
 	_ "modernc.org/sqlite"
 )
 
+const tyoqBanner = `
+$$$$$$$$\ $$\     $$\  $$$$$$\   $$$$$$\  
+\__$$  __|\$$\   $$  |$$  __$$\ $$  __$$\ 
+   $$ |    \$$\ $$  / $$ /  $$ |$$ /  $$ |
+   $$ |     \$$$$  /  $$ |  $$ |$$ |  $$ |
+   $$ |      \$$  /   $$ |  $$ |$$ |  $$ |
+   $$ |       $$ |    $$ |  $$ |$$ $$\$$ |
+   $$ |       $$ |     $$$$$$  |\$$$$$$ / 
+   \__|       \__|     \______/  \___$$$\ 
+                                     \___|`
+
 var (
 	correctStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#89DCEB"))
 	errorStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("#F38BA8"))
@@ -834,18 +845,18 @@ func (m model) typingView() string {
 	header := "Let's see how fast you type!"
 	headerBox := headerStyle.Width(contentW).Render(header)
 
-	wordsTyped := 0
-	if m.typed > 0 && m.typed <= len(m.targetText) {
-		wordsTyped = strings.Count(m.targetText[:m.typed], " ")
-	}
-	totalWords := len(strings.Fields(m.targetText))
-	if totalWords <= 0 {
-		totalWords = 1
-	}
+	// wordsTyped := 0
+	// if m.typed > 0 && m.typed <= len(m.targetText) {
+	// 	wordsTyped = strings.Count(m.targetText[:m.typed], " ")
+	// }
+	// totalWords := len(strings.Fields(m.targetText))
+	// if totalWords <= 0 {
+	// 	totalWords = 1
+	// }
 	// badge := badgeLabelStyle.Render("words ") +
 	// 	badgeStyle.Render(fmt.Sprintf("%d/%d", wordsTyped, totalWords))
 	bar := lipgloss.PlaceHorizontal(contentW, lipgloss.Center,
-		progressBar(wordsTyped, totalWords, min(contentW-4, 50)))
+		progressBar(m.typed, len(m.targetText), min(contentW-4, 50)))
 
 	allLines := wrapLines(m.targetText, m.textWidth())
 	startLine := m.scrollOffset
@@ -1056,17 +1067,6 @@ func (m welcomeModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 	return m, nil
 }
-
-const tyoqBanner = `
-$$$$$$$$\ $$\     $$\  $$$$$$\   $$$$$$\  
-\__$$  __|\$$\   $$  |$$  __$$\ $$  __$$\ 
-   $$ |    \$$\ $$  / $$ /  $$ |$$ /  $$ |
-   $$ |     \$$$$  /  $$ |  $$ |$$ |  $$ |
-   $$ |      \$$  /   $$ |  $$ |$$ |  $$ |
-   $$ |       $$ |    $$ |  $$ |$$ $$\$$ |
-   $$ |       $$ |     $$$$$$  |\$$$$$$ / 
-   \__|       \__|     \______/  \___$$$\ 
-                                     \___|`
 
 func (m welcomeModel) View() tea.View {
 	w := max(m.width, 1)
