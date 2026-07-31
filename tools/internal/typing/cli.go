@@ -137,7 +137,7 @@ func (m customInputModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		case "enter":
 			return m, tea.Quit
-		case "shift+enter":
+		case "ctrl+enter":
 			m.input = []rune{}
 		case "backspace":
 			if len(m.input) > 0 {
@@ -167,7 +167,7 @@ func (m customInputModel) View() tea.View {
 	}
 	previewCard := cardStyle.Width(contentW).Render(preview)
 
-	footer := footerStyle.Padding(1, 1).Margin(1, 1).Render(highlightFooter("enter to confirm · esc to quit · shift+enter to reset the text"))
+	footer := footerHint("enter to confirm · esc to quit · ctrl+enter to reset the text", m.width, footerStyle)
 
 	body := lipgloss.JoinVertical(lipgloss.Center,
 		promptBox,
@@ -204,7 +204,6 @@ func runCustomInput() string {
 
 func initialModel(quotes []string, customText string, isCustom bool) model {
 	targetText := ""
-	index := 1
 	if isCustom {
 		targetText = customText
 	} else if len(quotes) > 0 {
@@ -220,7 +219,7 @@ func initialModel(quotes []string, customText string, isCustom bool) model {
 		startTime:    time.Now(),
 		width:        80,
 		height:       24,
-		index:        index,
+		index:        0,
 	}
 }
 
@@ -442,7 +441,7 @@ func (m quoteSelectionModel) View() tea.View {
 	if m.step == stepAuthor {
 		footerText = "↑/↓ navigate · enter select · esc back · ctrl+c quit"
 	}
-	footer := footerStyle.Padding(1, 1).Margin(1, 1).Width(w).Align(lipgloss.Center).Render(highlightFooter(footerText))
+	footer := footerHint(footerText, w, footerStyle)
 
 	body := lipgloss.JoinVertical(lipgloss.Center,
 		title,
@@ -496,15 +495,15 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.menuRequested = true
 				return m, tea.Quit
 			case "n":
-				return m.reset(m.width, m.height), tea.ClearScreen
+				return m.next(m.width, m.height), tea.ClearScreen
 			case "r":
-				return m.resetSame(m.width, m.height), tea.ClearScreen
+				return m.reset(), tea.ClearScreen
 			case "up", "down", "left", "right", "pgup", "pgdown", "home", "end":
 				// ignore navigation keys (mouse wheel) on the results page
 				return m, nil
 			default:
 				// any other key types the same quote again
-				return m.resetSame(m.width, m.height), tea.ClearScreen
+				return m.reset(), tea.ClearScreen
 			}
 		}
 		if m.done {
@@ -516,8 +515,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		case "ctrl+c":
 			return m, tea.Quit
+		case "shift+enter":
+			return m.previous(m.width, m.height), tea.ClearScreen
 		case "enter":
-			return m.reset(m.width, m.height), tea.ClearScreen
+			return m.next(m.width, m.height), tea.ClearScreen
 		case "backspace":
 			if m.typed > 0 {
 				m.typed--
@@ -559,14 +560,17 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m model) reset(width, height int) model {
+func (m model) previous(width, height int) model {
 	targetText := ""
-	index := 1
+	index := 0
 	if m.isCustom {
 		targetText = m.customText
 	} else if len(m.quotes) > 0 {
-		targetText = m.quotes[m.index]
-		index = (m.index + 1) % len(m.quotes) // wrap around
+		index = (m.index - 1) % len(m.quotes) // wrap around
+		if index < 0 {
+			index = 0
+		}
+		targetText = m.quotes[index]
 	}
 	targetText = strings.Join(strings.Fields(targetText), " ")
 	return model{
@@ -582,10 +586,18 @@ func (m model) reset(width, height int) model {
 	}
 }
 
-// resetSame restarts the typing model with the same quote (retype).
-func (m model) resetSame(width, height int) model {
+func (m model) next(width, height int) model {
+	targetText := ""
+	index := 0
+	if m.isCustom {
+		targetText = m.customText
+	} else if len(m.quotes) > 0 {
+		index = (m.index + 1) % len(m.quotes) // wrap around
+		targetText = m.quotes[index]
+	}
+	targetText = strings.Join(strings.Fields(targetText), " ")
 	return model{
-		targetText:   m.targetText,
+		targetText:   targetText,
 		quotes:       m.quotes,
 		customText:   m.customText,
 		isCustom:     m.isCustom,
@@ -593,6 +605,21 @@ func (m model) resetSame(width, height int) model {
 		startTime:    time.Now(),
 		width:        width,
 		height:       height,
+		index:        index,
+	}
+}
+
+// reset restarts the typing model with the same quote (retype).
+func (m model) reset() model {
+	return model{
+		targetText:   m.targetText,
+		quotes:       m.quotes,
+		customText:   m.customText,
+		isCustom:     m.isCustom,
+		errorIndices: make(map[int]bool),
+		startTime:    time.Now(),
+		width:        m.width,
+		height:       m.height,
 		index:        m.index,
 	}
 }
@@ -843,8 +870,8 @@ func (m model) typingView() string {
 	}
 	textContent := m.renderLines(allLines[startLine:endLine], m.textWidth())
 
-	footer := footerStyle.Padding(1, 1).Margin(1, 1).Width(w).Align(lipgloss.Center).
-		Render(highlightFooter("enter next quote · esc back to menu · ctrl+c quit"))
+	footer := footerHint("shift+enter previous quote · enter next quote · esc back to menu · ctrl+c quit", w, footerStyle)
+
 	body := lipgloss.JoinVertical(lipgloss.Center,
 		headerBox,
 		bar,
@@ -889,8 +916,7 @@ func (m model) resultsView() string {
 	}, "\n")
 	statsBox := cardStyle.Width(contentW).Align(lipgloss.Center).Render(rows)
 
-	footer := greenStyle.Padding(1, 1).Margin(1, 1).Width(w).Align(lipgloss.Center).
-		Render(highlightFooter("r repeat · n next quote · m menu · esc quit"))
+	footer := footerHint("r repeat · n next quote · m menu · esc quit", w, greenStyle)
 	body := lipgloss.JoinVertical(lipgloss.Center,
 		headerBox,
 		"",
@@ -924,6 +950,14 @@ func highlightFooter(s string) string {
 		}
 	}
 	return strings.Join(rendered, " "+dimStyle.Render(footerSep)+" ")
+}
+
+// footerHint renders a footer string with highlighted keys, centred and
+// padded. base controls the colour of the key descriptions (footerStyle
+// or greenStyle).
+func footerHint(text string, w int, base lipgloss.Style) string {
+	return base.Padding(1, 1).Margin(1, 1).Width(w).Align(lipgloss.Center).
+		Render(highlightFooter(text))
 }
 
 // progressBar renders a labelled progress bar of the given width.
