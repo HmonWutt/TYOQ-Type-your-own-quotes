@@ -177,7 +177,6 @@ func (m customInputModel) View() tea.View {
 		footer,
 	)
 	content := lipgloss.PlaceHorizontal(w, lipgloss.Center, body)
-	content = padToSize(content, w, max(m.height, 1))
 
 	v := tea.NewView(content)
 	v.AltScreen = true
@@ -431,7 +430,7 @@ func (m quoteSelectionModel) View() tea.View {
 				Foreground(lipgloss.Color("#A6E3A1")).
 				Bold(true).
 				Render(label)
-			lines = append(lines, cursor+"  "+text)
+			lines = append(lines, cursor+" "+text)
 		} else {
 			lines = append(lines, dimStyle.Render("  "+label))
 		}
@@ -455,7 +454,6 @@ func (m quoteSelectionModel) View() tea.View {
 		footer,
 	)
 	content := lipgloss.PlaceHorizontal(w, lipgloss.Center, body)
-	content = padToSize(content, w, max(m.height, 1))
 
 	v := tea.NewView(content)
 	v.AltScreen = true
@@ -806,36 +804,9 @@ func (m model) View() tea.View {
 		content = m.typingView()
 	}
 
-	// Force every frame to be a solid w×h block so the renderer fully
-	// overwrites the previous frame. This prevents stale characters from
-	// a previous (possibly differently-sized) frame lingering after a
-	// resize or quote change.
-	w := max(m.width, 1)
-	h := max(m.height, 1)
-	content = padToSize(content, w, h)
-
 	v := tea.NewView(content)
 	v.AltScreen = true
 	return v
-}
-
-// padToSize ensures s fills exactly width×height cells: each line is
-// padded/truncated to width, the line count is padded to height.
-func padToSize(s string, width, height int) string {
-	lines := strings.Split(s, "\n")
-	for i, line := range lines {
-		lw := lipgloss.Width(line)
-		if lw < width {
-			lines[i] = line + strings.Repeat(" ", width-lw)
-		}
-	}
-	for len(lines) < height {
-		lines = append(lines, strings.Repeat(" ", width))
-	}
-	if len(lines) > height {
-		lines = lines[:height]
-	}
-	return strings.Join(lines, "\n")
 }
 
 func (m model) typingView() string {
@@ -1081,7 +1052,6 @@ func (m welcomeModel) View() tea.View {
 		bar,
 	)
 	content := lipgloss.PlaceHorizontal(w, lipgloss.Center, body)
-	content = padToSize(content, w, max(m.height, 1))
 
 	v := tea.NewView(content)
 	v.AltScreen = true
