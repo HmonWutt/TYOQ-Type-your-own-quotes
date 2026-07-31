@@ -52,6 +52,8 @@ go run ./cmd/typing/main.go -i     # paste your own text
 - [x] Replace UI with Bubbletea
 - [x] Clean quotes
 - [x] Filter quotes by author & length
+- [ ] Save progress
+- [ ] Save custom quotes
 - [ ] Different themes for the UI
 
 ## License
