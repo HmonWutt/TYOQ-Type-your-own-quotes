@@ -196,15 +196,12 @@ func AppendToJSONL[T any](filename string, quotes []T) error {
 		bytes, err := json.Marshal(quote)
 		if err != nil {
 			return err
-		} else {
-			_, err = file.Write(bytes)
-			if err != nil {
-				return err
-			}
-			_, err = file.Write([]byte("\n"))
-			if err != nil {
-				return err
-			}
+		}
+		if _, err := file.Write(bytes); err != nil {
+			return err
+		}
+		if _, err = file.Write([]byte("\n")); err != nil {
+			return err
 		}
 	}
 	return nil

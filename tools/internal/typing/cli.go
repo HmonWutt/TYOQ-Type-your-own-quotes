@@ -196,7 +196,7 @@ func runCustomInput() string {
 
 	m := finalModel.(customInputModel)
 	if m.cancelled {
-		os.Exit(0)
+		return ""
 	}
 
 	return strings.TrimSpace(string(m.input))
@@ -260,7 +260,8 @@ func loadQuotesFiltered(length, author string) []string {
 	if len(conditions) > 0 {
 		query += " where " + strings.Join(conditions, " and ")
 	}
-	query += fmt.Sprintf(" limit %d", LIMIT)
+	query += " limit ?"
+	args = append(args, LIMIT)
 
 	rows, err := dbConn.Query(query, args...)
 	if err != nil {
@@ -460,7 +461,7 @@ func (m quoteSelectionModel) View() tea.View {
 }
 
 // runQuoteSelection launches the length/tag/author picker and returns the
-// chosen filters. Returns ("", "", "") and exits if the user cancels.
+// chosen filters. Returns ("", "") and exits if the user cancels.
 func runQuoteSelection() (length, author string) {
 	p := tea.NewProgram(newQuoteSelectionModel())
 	finalModel, err := p.Run()
@@ -471,7 +472,7 @@ func runQuoteSelection() (length, author string) {
 
 	m := finalModel.(quoteSelectionModel)
 	if m.cancelled {
-		os.Exit(0)
+		return "", ""
 	}
 	return m.chosenLength, m.chosenAuthor
 }
@@ -1017,6 +1018,9 @@ func launchSelection(isCustom bool) (quotes []string, customText string) {
 	}
 	for {
 		length, author := runQuoteSelection()
+		if length == "" {
+			return nil, ""
+		}
 		quotes = loadQuotesFiltered(length, author)
 		if len(quotes) > 0 {
 			return quotes, ""
@@ -1061,7 +1065,7 @@ func (m welcomeModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyPressMsg:
 		switch msg.String() {
 		case "esc", "ctrl+c":
-			os.Exit(0)
+			return m, tea.Quit
 		default:
 			m.progress = 100
 			m.done = true

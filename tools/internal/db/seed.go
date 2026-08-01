@@ -31,10 +31,6 @@ func Insert(db *sql.DB, q *cleaner.CleanQuote) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	fmt.Printf(
-		"The quote was inserted with ID:%d\n",
-		id,
-	)
 	return id, nil
 }
 
@@ -114,8 +110,6 @@ func ReadFromFile(filename string) ([]cleaner.CleanQuote, error) {
 		}
 		if quote.Text != "" {
 			quotes = append(quotes, quote)
-		} else {
-			fmt.Println("quote empty: ", quote.Authors)
 		}
 	}
 	return quotes, nil
