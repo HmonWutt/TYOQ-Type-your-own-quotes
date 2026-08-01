@@ -9,5 +9,4 @@ archive_seed.sql
 data/*.jsonl
 data/*.txt
 data/*.db
-*_test.go
 _*

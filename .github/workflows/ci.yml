@@ -1,0 +1,30 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    name: build & test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: tools/go.mod
+
+      - name: Build
+        working-directory: tools
+        run: go build ./...
+
+      - name: Vet
+        working-directory: tools
+        run: go vet ./...
+
+      - name: Test
+        working-directory: tools
+        run: go test ./...

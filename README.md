@@ -1,5 +1,6 @@
 # TYOQ — Type Your Own Quotes
 
+![CI](https://github.com/HmonWutt/TYOQ-Type-your-own-quotes/actions/workflows/ci.yml/badge.svg)
 ![Go 1.26.4](https://img.shields.io/badge/Go-1.26.4+-00ADD8?logo=go&logoColor=white)
 ![License: MIT](https://img.shields.io/badge/license-MIT-green)
 

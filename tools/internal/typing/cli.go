@@ -494,10 +494,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "m":
 				m.menuRequested = true
 				return m, tea.Quit
-			case "n":
+			case "enter":
 				return m.next(m.width, m.height), tea.ClearScreen
-			case "r":
-				return m.reset(), tea.ClearScreen
 			case "up", "down", "left", "right", "pgup", "pgdown", "home", "end":
 				// ignore navigation keys (mouse wheel) on the results page
 				return m, nil
@@ -916,7 +914,7 @@ func (m model) resultsView() string {
 	}, "\n")
 	statsBox := cardStyle.Width(contentW).Align(lipgloss.Center).Render(rows)
 
-	footer := footerHint("r repeat · n next quote · m menu · esc quit", w, greenStyle)
+	footer := footerHint("r repeat · enter next quote · m menu · esc quit", w, greenStyle)
 	body := lipgloss.JoinVertical(lipgloss.Center,
 		headerBox,
 		"",
