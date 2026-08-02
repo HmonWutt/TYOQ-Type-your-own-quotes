@@ -201,7 +201,7 @@ func TestModelNext(t *testing.T) {
 	m.quotes = []string{"q0", "q1", "q2"}
 	m.index = 0
 
-	newM := m.next(100, 40)
+	newM := m.next()
 	if newM.index != 1 {
 		t.Errorf("expected index 1, got %d", newM.index)
 	}
@@ -211,7 +211,7 @@ func TestModelNext(t *testing.T) {
 
 	// wraps around at the end
 	m.index = 2
-	newM = m.next(100, 40)
+	newM = m.next()
 	if newM.index != 0 {
 		t.Errorf("expected index to wrap to 0, got %d", newM.index)
 	}
@@ -226,7 +226,7 @@ func TestModelNext_CustomText(t *testing.T) {
 	m.customText = "my custom text"
 	m.index = 0
 
-	newM := m.next(100, 40)
+	newM := m.next()
 	if newM.targetText != "my custom text" {
 		t.Errorf("expected custom text, got %q", newM.targetText)
 	}
@@ -237,7 +237,7 @@ func TestModelPrevious(t *testing.T) {
 	m.quotes = []string{"q0", "q1", "q2"}
 	m.index = 2
 
-	newM := m.previous(100, 40)
+	newM := m.previous()
 	if newM.index != 1 {
 		t.Errorf("expected index 1, got %d", newM.index)
 	}
@@ -247,7 +247,7 @@ func TestModelPrevious(t *testing.T) {
 
 	// wraps around to the last quote
 	m.index = 0
-	newM = m.previous(100, 40)
+	newM = m.previous()
 	if newM.index != 2 {
 		t.Errorf("expected index to wrap to 2, got %d", newM.index)
 	}
@@ -261,7 +261,7 @@ func TestModelPrevious_CustomText(t *testing.T) {
 	m.isCustom = true
 	m.customText = "my custom text"
 
-	newM := m.previous(100, 40)
+	newM := m.previous()
 	if newM.targetText != "my custom text" {
 		t.Errorf("expected custom text, got %q", newM.targetText)
 	}
