@@ -11,14 +11,9 @@ A MonkeyType-inspired typing TUI
 ### Typing practice (Go)
 ```bash
 cd ./tools
-go run ./cmd/typing/main.go # random quotes
-go run ./cmd/typing/main.go -i     # paste your own text
+go run ./cmd/typing/main.go 
 ```
 
-<!-- ### Typing practice (Docker) -->
-<!-- ```bash -->
-<!-- docker compose run --rm -it app    #random quotes -->
-<!-- ``` -->
 ## Components
 
 | Component | Path | Description |

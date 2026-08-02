@@ -109,10 +109,11 @@ const (
 )
 
 type customInputModel struct {
-	input     []rune
-	width     int
-	height    int
-	cancelled bool
+	input        []rune
+	width        int
+	height       int
+	cancelled    bool
+	scrollOffset int
 }
 
 func newCustomInputModel() customInputModel {
@@ -134,7 +135,9 @@ func (m customInputModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyPressMsg:
 		switch msg.String() {
-		case "esc", "ctrl+c":
+		case "ctrl+c":
+			return m, tea.Quit
+		case "esc":
 			m.cancelled = true
 			return m, tea.Quit
 		case "enter":
@@ -151,25 +154,86 @@ func (m customInputModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 	}
+	m.scrollOffset = m.updateScroll()
 	return m, nil
+}
+
+// customTextWidth is the inner width of the preview card for custom input.
+func (m customInputModel) customTextWidth() int {
+	w := max(m.width, 1)
+	contentW := min(w-4, 64)
+	return max(contentW-4, 1)
+}
+
+// customLinesVisible returns how many wrapped lines of pasted text can fit
+// in the preview card given the terminal height.
+func (m customInputModel) customLinesVisible() int {
+	const maxVisible = 12
+	const chrome = 10 // header + footer + separators
+	avail := max(1, m.height-chrome)
+	visible := min(maxVisible, avail)
+	totalLines := len(wrapLines(string(m.input), m.customTextWidth()))
+	return min(visible, totalLines)
+}
+
+func (m customInputModel) updateScroll() int {
+	tw := m.customTextWidth()
+	lines := wrapLines(string(m.input), tw)
+	visible := m.customLinesVisible()
+	if visible <= 0 || len(lines) <= visible {
+		return 0
+	}
+	cursorLine := len(lines) - 1
+	maxOffset := len(lines) - visible
+	offset := max(0, min(cursorLine-1, maxOffset))
+	return offset
 }
 
 func (m customInputModel) View() tea.View {
 	w := max(m.width, 1)
 	contentW := min(w-4, 64)
 
-	instruction := "Welcome to TYOQ. Paste your text below"
+	instruction := "Paste your text below"
 	promptBox := headerStyle.Width(contentW).Render(instruction)
 
-	preview := string(m.input)
-	if preview == "" {
+	tw := m.customTextWidth()
+	allLines := wrapLines(string(m.input), tw)
+	startLine := m.scrollOffset
+	endLine := startLine + m.customLinesVisible()
+	if startLine > len(allLines) {
+		startLine = len(allLines)
+	}
+	if endLine > len(allLines) {
+		endLine = len(allLines)
+	}
+	if endLine < startLine {
+		endLine = startLine
+	}
+
+	var preview string
+	if len(m.input) == 0 {
 		preview = dimStyle.Render("(waiting for input...)")
 	} else {
-		preview = correctStyle.Render(preview)
+		var out strings.Builder
+		runes := m.input
+		for li, line := range allLines[startLine:endLine] {
+			if li > 0 {
+				out.WriteString("\n")
+			}
+			used := 0
+			for _, i := range line {
+				out.WriteString(correctStyle.Render(string(runes[i])))
+				used++
+			}
+			if used < tw {
+				out.WriteString(strings.Repeat(" ", tw-used))
+			}
+		}
+		preview = out.String()
 	}
 	previewCard := cardStyle.Width(contentW).Render(preview)
 
-	footer := footerHint("enter to confirm · esc to quit · ctrl+enter to reset the text", m.width, footerStyle)
+	footer := footerHint("enter to confirm · esc back to menu · ctrl+c quit · ctrl+enter to reset the text", m.width, footerStyle)
 
 	body := lipgloss.JoinVertical(lipgloss.Center,
 		promptBox,
@@ -187,9 +251,9 @@ func (m customInputModel) View() tea.View {
 }
 
 // runCustomInput launches the custom-input screen as its own bubbletea
-// program and returns the text the user entered. Returns "" and exits
-// the process if the user cancels with esc/ctrl+c.
-func runCustomInput() string {
+// program and returns the text the user entered and whether they cancelled.
+// cancelled=true means the user pressed esc to go back to the menu.
+func runCustomInput() (string, bool) {
 	p := tea.NewProgram(newCustomInputModel())
 	finalModel, err := p.Run()
 	if err != nil {
@@ -199,10 +263,10 @@ func runCustomInput() string {
 
 	m := finalModel.(customInputModel)
 	if m.cancelled {
-		return ""
+		return "", true
 	}
 
-	return strings.TrimSpace(string(m.input))
+	return strings.TrimSpace(string(m.input)), false
 }
 
 func initialModel(quotes []string, customText string, isCustom bool) model {
@@ -269,7 +333,7 @@ func loadQuotesFiltered(length, author string) ([]string, error) {
 
 	rows, err := dbConn.Query(query, args...)
 	if err != nil {
-		return nil, fmt.Errorf("query failed: ", err)
+		return nil, fmt.Errorf("query failed: %w", err)
 	}
 	defer rows.Close()
 
@@ -287,7 +351,8 @@ func loadQuotesFiltered(length, author string) ([]string, error) {
 type selectionStep int
 
 const (
-	stepLength selectionStep = iota
+	stepMode selectionStep = iota
+	stepLength
 	stepAuthor
 	stepDone
 )
@@ -300,9 +365,11 @@ type quoteSelectionModel struct {
 	height    int
 	cancelled bool
 
+	modeOptions   []string
 	lengthOptions []string
 	authorOptions []string
 
+	chosenMode   string
 	chosenLength string
 	chosenAuthor string
 }
@@ -312,6 +379,7 @@ func newQuoteSelectionModel() quoteSelectionModel {
 	return quoteSelectionModel{
 		width:         80,
 		height:        24,
+		modeOptions:   []string{"Stock quotes", "Custom text"},
 		lengthOptions: []string{"Any", "Short", "Medium", "Long", "Extra Long"},
 		authorOptions: authors,
 	}
@@ -319,6 +387,8 @@ func newQuoteSelectionModel() quoteSelectionModel {
 
 func (m quoteSelectionModel) currentOptions() []string {
 	switch m.step {
+	case stepMode:
+		return m.modeOptions
 	case stepLength:
 		return m.lengthOptions
 	case stepAuthor:
@@ -329,6 +399,8 @@ func (m quoteSelectionModel) currentOptions() []string {
 
 func (m quoteSelectionModel) stepTitle() string {
 	switch m.step {
+	case stepMode:
+		return "Choose a mode"
 	case stepLength:
 		return "Choose length of quotes"
 	case stepAuthor:
@@ -339,6 +411,11 @@ func (m quoteSelectionModel) stepTitle() string {
 
 // advance moves to the next step, skipping any step that only has "Any".
 func (m quoteSelectionModel) advance() (quoteSelectionModel, tea.Cmd) {
+	// custom text mode skips length/author selection
+	if m.chosenMode == "Custom text" {
+		m.step = stepDone
+		return m, tea.Quit
+	}
 	m.step++
 	m.cursor = 0
 	m.scroll = 0
@@ -374,6 +451,12 @@ func (m quoteSelectionModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.scroll = 0
 				return m, tea.ClearScreen
 			}
+			if m.step == stepLength {
+				m.step = stepMode
+				m.cursor = 0
+				m.scroll = 0
+				return m, tea.ClearScreen
+			}
 			m.cancelled = true
 			return m, tea.Quit
 		case "up", "k":
@@ -387,6 +470,8 @@ func (m quoteSelectionModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "enter":
 			choice := m.currentOptions()[m.cursor]
 			switch m.step {
+			case stepMode:
+				m.chosenMode = choice
 			case stepLength:
 				m.chosenLength = choice
 			case stepAuthor:
@@ -406,6 +491,9 @@ func (m quoteSelectionModel) View() tea.View {
 	title := headerStyle.Width(contentW).Render(m.stepTitle())
 
 	var breadcrumbs []string
+	if m.chosenMode != "" {
+		breadcrumbs = append(breadcrumbs, "Mode: "+m.chosenMode)
+	}
 	if m.chosenLength != "" {
 		breadcrumbs = append(breadcrumbs, "Length: "+m.chosenLength)
 	}
@@ -446,6 +534,9 @@ func (m quoteSelectionModel) View() tea.View {
 	if m.step == stepAuthor {
 		footerText = "↑/↓ navigate · enter select · esc back · ctrl+c quit"
 	}
+	if m.step == stepLength {
+		footerText = "↑/↓ navigate · enter select · esc back · ctrl+c quit"
+	}
 	footer := footerHint(footerText, w, footerStyle)
 
 	body := lipgloss.JoinVertical(lipgloss.Center,
@@ -465,9 +556,9 @@ func (m quoteSelectionModel) View() tea.View {
 	return v
 }
 
-// runQuoteSelection launches the length/tag/author picker and returns the
-// chosen filters. Returns ("", "") and exits if the user cancels.
-func runQuoteSelection() (length, author string) {
+// runQuoteSelection launches the mode/length/author picker and returns the
+// chosen mode, length, and author. Returns ("", "", "") if the user cancels.
+func runQuoteSelection() (mode, length, author string) {
 	p := tea.NewProgram(newQuoteSelectionModel())
 	finalModel, err := p.Run()
 	if err != nil {
@@ -477,9 +568,9 @@ func runQuoteSelection() (length, author string) {
 
 	m := finalModel.(quoteSelectionModel)
 	if m.cancelled {
-		return "", ""
+		return "", "", ""
 	}
-	return m.chosenLength, m.chosenAuthor
+	return m.chosenMode, m.chosenLength, m.chosenAuthor
 }
 
 func (m model) Init() tea.Cmd {
@@ -1019,12 +1110,10 @@ func progressBar(current, total, width int) string {
 }
 
 func Type() {
-	isCustom := len(os.Args) > 1 && os.Args[1] == "-i"
-
 	runWelcome()
 
 	for {
-		quotes, customText := launchSelection(isCustom)
+		quotes, customText, isCustom := launchSelection()
 		if len(quotes) == 0 && customText == "" {
 			return
 		}
@@ -1045,25 +1134,29 @@ func Type() {
 	}
 }
 
-// launchSelection runs the appropriate selection screen (custom input or
+// launchSelection runs the selection screen (mode picker → custom input or
 // quote picker) and returns the quotes/customText to type. Returns empty
 // values if the user cancelled.
-func launchSelection(isCustom bool) (quotes []string, customText string) {
-	if isCustom {
-		return nil, runCustomInput()
-	}
+func launchSelection() (quotes []string, customText string, isCustom bool) {
 	for {
-		length, author := runQuoteSelection()
-		if length == "" {
-			return nil, ""
+		mode, length, author := runQuoteSelection()
+		if mode == "" {
+			return nil, "", false
 		}
+	if mode == "Custom text" {
+		text, cancelled := runCustomInput()
+		if cancelled {
+			continue // back to menu
+		}
+		return nil, text, true
+	}
 		quotes, err := loadQuotesFiltered(length, author)
 		if err != nil {
 			fmt.Printf("⚠  %v\n", err)
-			return nil, ""
+			return nil, "", false
 		}
 		if len(quotes) > 0 {
-			return quotes, ""
+			return quotes, "", false
 		}
 	}
 }
