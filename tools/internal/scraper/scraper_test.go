@@ -166,18 +166,18 @@ func TestExtractQuoteText(t *testing.T) {
 		expected string
 	}{
 		{
-			name: "simple quote",
-			html: `<div class="quoteText">A great quote<span class="authorOrTitle">Author</span></div>`,
+			name:     "simple quote",
+			html:     `<div class="quoteText">A great quote<span class="authorOrTitle">Author</span></div>`,
 			expected: "A great quote",
 		},
 		{
-			name: "quote with br tags",
-			html: `<div class="quoteText">Line 1<br/>Line 2<span class="authorOrTitle">Author</span></div>`,
+			name:     "quote with br tags",
+			html:     `<div class="quoteText">Line 1<br/>Line 2<span class="authorOrTitle">Author</span></div>`,
 			expected: "Line 1 Line 2",
 		},
 		{
-			name: "quote with em dash author separator",
-			html: `<div class="quoteText">The quote text<br/>―<span class="authorOrTitle">Author</span></div>`,
+			name:     "quote with em dash author separator",
+			html:     `<div class="quoteText">The quote text<br/>―<span class="authorOrTitle">Author</span></div>`,
 			expected: "The quote text",
 		},
 		{
@@ -186,8 +186,8 @@ func TestExtractQuoteText(t *testing.T) {
 			expected: "",
 		},
 		{
-			name: "contains html tags (preserved)",
-			html: `<div class="quoteText">Text with <i>italic</i><span class="authorOrTitle">Author</span></div>`,
+			name:     "contains html tags (preserved)",
+			html:     `<div class="quoteText">Text with <i>italic</i><span class="authorOrTitle">Author</span></div>`,
 			expected: "Text with <i>italic</i>",
 		},
 	}

@@ -2,8 +2,10 @@ package typing
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -177,6 +179,7 @@ func (m customInputModel) View() tea.View {
 		footer,
 	)
 	content := lipgloss.PlaceHorizontal(w, lipgloss.Center, body)
+	content = padToSize(content, w, max(m.height, 1))
 
 	v := tea.NewView(content)
 	v.AltScreen = true
@@ -225,15 +228,16 @@ func initialModel(quotes []string, customText string, isCustom bool) model {
 
 // loadQuotesFiltered loads quotes matching the given length bucket, and
 // author. Pass "Any" (or "") for a filter to skip it.
-func loadQuotesFiltered(length, author string) []string {
+func loadQuotesFiltered(length, author string) ([]string, error) {
 	path, err := db.EnsureDB()
 	if err != nil {
-		return nil
+		return nil, fmt.Errorf("ensure db on disk: %w", err)
 	}
 	dbConn, err := sql.Open("sqlite", path)
 	if err != nil {
-		return nil
+		return nil, fmt.Errorf("open db: %w", err)
 	}
+
 	defer dbConn.Close()
 	query := "select text from quotes"
 	var conditions []string
@@ -265,7 +269,7 @@ func loadQuotesFiltered(length, author string) []string {
 
 	rows, err := dbConn.Query(query, args...)
 	if err != nil {
-		return nil
+		return nil, fmt.Errorf("query failed: ", err)
 	}
 	defer rows.Close()
 
@@ -277,7 +281,7 @@ func loadQuotesFiltered(length, author string) []string {
 		}
 		quotes = append(quotes, text)
 	}
-	return quotes
+	return quotes, nil
 }
 
 type selectionStep int
@@ -454,6 +458,7 @@ func (m quoteSelectionModel) View() tea.View {
 		footer,
 	)
 	content := lipgloss.PlaceHorizontal(w, lipgloss.Center, body)
+	content = padToSize(content, w, max(m.height, 1))
 
 	v := tea.NewView(content)
 	v.AltScreen = true
@@ -496,7 +501,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.menuRequested = true
 				return m, tea.Quit
 			case "enter":
-				return m.next(m.width, m.height), tea.ClearScreen
+				return m.next(), tea.ClearScreen
 			case "up", "down", "left", "right", "pgup", "pgdown", "home", "end":
 				// ignore navigation keys (mouse wheel) on the results page
 				return m, nil
@@ -515,9 +520,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "ctrl+c":
 			return m, tea.Quit
 		case "shift+enter":
-			return m.previous(m.width, m.height), tea.ClearScreen
+			return m.previous(), tea.ClearScreen
 		case "enter":
-			return m.next(m.width, m.height), tea.ClearScreen
+			return m.next(), tea.ClearScreen
 		case "backspace":
 			if m.typed > 0 {
 				m.typed--
@@ -535,8 +540,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			r := msg.Text
 			targetRunes := []rune(m.targetText)
 			if m.typed < len(targetRunes) {
-				typedRunes := []rune(r)
-				for _, tr := range typedRunes {
+				for _, tr := range r {
 					if m.typed >= len(targetRunes) {
 						break
 					}
@@ -559,15 +563,15 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m model) previous(width, height int) model {
+func (m model) previous() model {
 	targetText := ""
 	index := 0
 	if m.isCustom {
 		targetText = m.customText
 	} else if len(m.quotes) > 0 {
-		index = (m.index - 1) % len(m.quotes) // wrap around
+		index = (m.index - 1) % len(m.quotes)
 		if index < 0 {
-			index = 0
+			index += len(m.quotes)
 		}
 		targetText = m.quotes[index]
 	}
@@ -579,13 +583,13 @@ func (m model) previous(width, height int) model {
 		isCustom:     m.isCustom,
 		errorIndices: make(map[int]bool),
 		startTime:    time.Now(),
-		width:        width,
-		height:       height,
+		width:        m.width,
+		height:       m.height,
 		index:        index,
 	}
 }
 
-func (m model) next(width, height int) model {
+func (m model) next() model {
 	targetText := ""
 	index := 0
 	if m.isCustom {
@@ -602,8 +606,8 @@ func (m model) next(width, height int) model {
 		isCustom:     m.isCustom,
 		errorIndices: make(map[int]bool),
 		startTime:    time.Now(),
-		width:        width,
-		height:       height,
+		width:        m.width,
+		height:       m.height,
 		index:        index,
 	}
 }
@@ -661,6 +665,35 @@ func (m model) charStyle(kind styleKind) lipgloss.Style {
 // wrapLines splits targetText into visual lines of at most width runes,
 // breaking at word boundaries when possible so words don't split mid-word.
 // Each returned entry is the slice of rune indices belonging to that line.
+func rangeSlice(start, end int) []int {
+	token := make([]int, end-start)
+	for i := range token {
+		token[i] = start + i
+	}
+	return token
+}
+
+// padToSize ensures s fills exactly width×height cells: each line is
+// padded or truncated to width, the line count is padded to height.
+func padToSize(s string, width, height int) string {
+	lines := strings.Split(s, "\n")
+	for i, line := range lines {
+		lw := lipgloss.Width(line)
+		if lw < width {
+			lines[i] = line + strings.Repeat(" ", width-lw)
+		} else if lw > width {
+			lines[i] = lipgloss.NewStyle().MaxWidth(width).Render(line)
+		}
+	}
+	for len(lines) < height {
+		lines = append(lines, strings.Repeat(" ", width))
+	}
+	if len(lines) > height {
+		lines = lines[:height]
+	}
+	return strings.Join(lines, "\n")
+}
+
 func wrapLines(target string, width int) [][]int {
 	runes := []rune(target)
 	if width <= 0 {
@@ -670,61 +703,77 @@ func wrapLines(target string, width int) [][]int {
 		return [][]int{{}}
 	}
 
+	var tokens [][]int
+	i := 0
+	for i < len(runes) {
+		if runes[i] == ' ' {
+			tokens = append(tokens, []int{i})
+			i++
+			continue
+		}
+		// gather a word (run of non-space)
+		start := i
+		end := start
+		for end < len(runes) && runes[end] != ' ' {
+			end++
+		}
+		tk := rangeSlice(start, end)
+		tokens = append(tokens, tk)
+		i = end
+	}
+	lines := buildLines(tokens, width)
+	return lines
+}
+
+type slice[T any] []T
+
+func (s *slice[T]) pop() (T, error) {
+	if len(*s) > 0 {
+		value := (*s)[0]
+		*s = (*s)[1:]
+		return value, nil
+	}
+	var zero T
+	return zero, errors.New("empty")
+}
+
+func buildLines(tokens [][]int, width int) [][]int {
+	ts := slice[[]int](tokens)
 	var lines [][]int
 	var current []int
-
 	flush := func() {
 		lines = append(lines, current)
 		current = nil
 	}
-
-	i := 0
-	for i < len(runes) {
-		// gather a word (run of non-space) or a single space
-		isSpace := runes[i] == ' '
-		j := i
-		for j < len(runes) && (runes[j] == ' ') == isSpace {
-			j++
-		}
-		token := make([]int, j-i)
-		for k := i; k < j; k++ {
-			token[k-i] = k
-		}
-
-		if len(current)+len(token) <= width {
-			current = append(current, token...)
-		} else {
+	for len(ts) > 0 {
+		tk, _ := ts.pop()
+		lengthOfToken := len(tk)
+		if len(current)+lengthOfToken <= width {
+			current = append(current, tk...)
+		} else if lengthOfToken > width {
 			// word longer than a full line: hard-break it across lines
-			if isSpace && len(current) == 0 {
-				// leading space on empty line that doesn't fit: drop it
-			} else if len(token) > width && !isSpace {
-				remaining := token
-				for len(remaining) > 0 {
-					take := width - len(current)
-					if take <= 0 {
-						flush()
-						continue
-					}
-					if take > len(remaining) {
-						take = len(remaining)
-					}
-					current = append(current, remaining[:take]...)
-					remaining = remaining[take:]
-					if len(remaining) > 0 {
-						flush()
-					}
+			remaining := tk
+			for len(remaining) > 0 {
+				take := width - len(current)
+				if take <= 0 {
+					flush()
+					continue
 				}
-			} else {
-				flush()
-				current = append(current, token...)
+				if take > len(remaining) {
+					take = len(remaining)
+				}
+				current = append(current, remaining[:take]...)
+				remaining = remaining[take:]
+				if len(remaining) > 0 {
+					flush()
+				}
 			}
+		} else {
+			flush()
+			current = append(current, tk...)
 		}
-		i = j
 	}
 	flush()
-	if len(lines) == 0 {
-		lines = append(lines, nil)
-	}
 	return lines
 }
 
@@ -733,6 +782,7 @@ func wrapLines(target string, width int) [][]int {
 // shorter lines overwrite stale characters from the previous frame when
 // scrolling.
 func (m model) renderLines(lines [][]int, width int) string {
+	runes := []rune(m.targetText)
 	if width <= 0 {
 		width = 80
 	}
@@ -743,7 +793,7 @@ func (m model) renderLines(lines [][]int, width int) string {
 		}
 		used := 0
 		for _, i := range line {
-			ch := []rune(m.targetText)[i]
+			ch := runes[i]
 			kind := m.charStyleKind(i)
 			style := m.charStyle(kind)
 			if kind == styleError && ch == ' ' && i < len(m.typedChars) {
@@ -772,34 +822,21 @@ func (m model) textWidth() int {
 func (m model) updateScroll() int {
 	tw := m.textWidth()
 	lines := wrapLines(m.targetText, tw)
-	totalLines := len(lines)
 	visible := m.textLinesVisible()
-	if visible <= 0 {
+	if visible <= 0 || len(lines) <= visible {
 		return 0
 	}
 	// find which line the cursor (typed position) is on
 	cursorLine := 0
 	for li, line := range lines {
-		for _, idx := range line {
-			if idx == m.typed {
-				cursorLine = li
-				break
-			}
+		if slices.Contains(line, m.typed) {
+			cursorLine = li
+			break
 		}
 	}
 	// keep cursor on the second visible row when possible
-	cursorRow := min(1, visible-1)
-	offset := cursorLine - cursorRow
-	if offset < 0 {
-		offset = 0
-	}
-	maxOffset := totalLines - visible
-	if maxOffset < 0 {
-		maxOffset = 0
-	}
-	if offset > maxOffset {
-		offset = maxOffset
-	}
+	maxOffset := len(lines) - visible
+	offset := max(0, min(cursorLine-1, maxOffset))
 	return offset
 }
 
@@ -812,11 +849,9 @@ func (m model) textLinesVisible() int {
 	const maxVisible = 6
 	// chrome lines: header (1), bar (1), footer (1),
 	// plus blank separators between sections (5).
-	const chrome = 8
+	const chrome = 12
 	avail := m.height - chrome
-	if avail < 1 {
-		avail = 1
-	}
+	avail = max(1, avail)
 	visible := min(maxVisible, avail)
 	totalLines := len(wrapLines(m.targetText, m.textWidth()))
 	return min(visible, totalLines)
@@ -829,6 +864,7 @@ func (m model) View() tea.View {
 	} else {
 		content = m.typingView()
 	}
+	content = padToSize(content, max(m.width, 1), max(m.height, 1))
 
 	v := tea.NewView(content)
 	v.AltScreen = true
@@ -887,7 +923,7 @@ func (m model) typingView() string {
 
 func (m model) resultsView() string {
 	w := max(m.width, 1)
-	contentW := min(w-4, 64)
+	contentW := max(w*70/100, 1)
 	total := len([]rune(m.targetText))
 	errors := len(m.errorIndices)
 
@@ -909,8 +945,8 @@ func (m model) resultsView() string {
 		return labelRender + strings.Repeat(" ", 1) + valueRender
 	}
 	rows := strings.Join([]string{
-		statRow("Speed", fmt.Sprintf("%s %.0f wpm\n", footerSep, speedWord), greenStyle),
-		statRow("Accuracy", fmt.Sprintf("%s %.0f%%\n", footerSep, accuracy), greenStyle),
+		statRow("Speed", fmt.Sprintf("%s %.0f wpm", footerSep, speedWord), greenStyle),
+		statRow("Accuracy", fmt.Sprintf("%s %.0f%%", footerSep, accuracy), greenStyle),
 		statRow("Time", fmt.Sprintf("%s %.1fs", footerSep, timeTaken), greenStyle),
 	}, "\n")
 	statsBox := cardStyle.Width(contentW).Align(lipgloss.Center).Render(rows)
@@ -1021,7 +1057,11 @@ func launchSelection(isCustom bool) (quotes []string, customText string) {
 		if length == "" {
 			return nil, ""
 		}
-		quotes = loadQuotesFiltered(length, author)
+		quotes, err := loadQuotesFiltered(length, author)
+		if err != nil {
+			fmt.Printf("⚠  %v\n", err)
+			return nil, ""
+		}
 		if len(quotes) > 0 {
 			return quotes, ""
 		}
@@ -1088,6 +1128,7 @@ func (m welcomeModel) View() tea.View {
 		bar,
 	)
 	content := lipgloss.PlaceHorizontal(w, lipgloss.Center, body)
+	content = padToSize(content, w, max(m.height, 1))
 
 	v := tea.NewView(content)
 	v.AltScreen = true

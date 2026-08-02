@@ -100,9 +100,9 @@ func TestCharStyle_ReturnsNonNil(t *testing.T) {
 
 func TestTextLinesVisible(t *testing.T) {
 	tests := []struct {
-		name string
-		text string
-		width int
+		name       string
+		text       string
+		width      int
 		expectView int
 	}{
 		{name: "short quote fits", text: "hello world", width: 80, expectView: 1},
@@ -130,10 +130,10 @@ func TestTextLinesVisible(t *testing.T) {
 func TestUpdateScroll(t *testing.T) {
 	// repeatWords(120) = 11 wrapped lines at width 80 (textWidth 56); visible = 6
 	tests := []struct {
-		name string
-		text string
-		width int
-		typed int
+		name     string
+		text     string
+		width    int
+		typed    int
 		expected int
 	}{
 		{name: "no scroll at start", text: repeatWords(120), width: 80, typed: 0, expected: 0},
@@ -245,14 +245,14 @@ func TestModelPrevious(t *testing.T) {
 		t.Errorf("expected target text 'q1', got %q", newM.targetText)
 	}
 
-	// clamps at 0 instead of wrapping (documented current behavior)
+	// wraps around to the last quote
 	m.index = 0
 	newM = m.previous(100, 40)
-	if newM.index != 0 {
-		t.Errorf("expected index to clamp at 0, got %d", newM.index)
+	if newM.index != 2 {
+		t.Errorf("expected index to wrap to 2, got %d", newM.index)
 	}
-	if newM.targetText != "q0" {
-		t.Errorf("expected target text 'q0' after clamp, got %q", newM.targetText)
+	if newM.targetText != "q2" {
+		t.Errorf("expected target text 'q2' after wrap, got %q", newM.targetText)
 	}
 }
 
