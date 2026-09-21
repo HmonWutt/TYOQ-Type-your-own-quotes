@@ -11,6 +11,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      
+      - name: install libpcre
+        run: sudo apt-get update && sudo apt-get install -y libpcre3-dev
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -20,7 +23,7 @@ jobs:
       - name: Build
         working-directory: tools
         run: go build ./...
-
+      
       - name: Vet
         working-directory: tools
         run: go vet ./...
