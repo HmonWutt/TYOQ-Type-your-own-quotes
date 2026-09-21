@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/HmonWutt/TYOQ-Type-your-own-quotes/tools/internal/scraper"
+	"github.com/gijsbers/go-pcre"
 	"github.com/pemistahl/lingua-go"
 )
 
@@ -131,6 +132,20 @@ func CleanQuotes(fromPath string, toPath string) error {
 	}
 	err = scraper.AppendToJSONL(toPath, cleanedQuotes)
 	return err
+}
+
+func cleanHTMLTags(text string) string {
+	re := pcre.MustCompile(`(.*?)<(:?\w+)>(.*?)(:?<\/\1>)(.*?)`, pcre.DOTALL)
+	matcher := re.MatcherString(text, 0)
+
+	var results []string
+	if matcher.Matches() {
+		groups := matcher.ExtractString()
+		results = append(results, groups...)
+
+		return strings.Join(results, " ")
+	}
+	return text
 }
 
 func cleanText(source string) string {

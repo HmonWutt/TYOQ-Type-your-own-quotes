@@ -26,6 +26,7 @@ func ExtractTextReader(r *zip.Reader) (string, error) {
 }
 
 func extract(r *zip.Reader) (string, error) {
+	var pages []string
 	opf, err := opfPath(r)
 	if err != nil {
 		return "", err
@@ -35,7 +36,6 @@ func extract(r *zip.Reader) (string, error) {
 		return "", err
 	}
 
-	var pages []string
 	for _, name := range files {
 		f, err := r.Open(name)
 		if err != nil {
@@ -46,7 +46,7 @@ func extract(r *zip.Reader) (string, error) {
 		}
 		f.Close()
 	}
-	// return pages // allow user to select chapters to type
+	// return pages, nil // allow user to select chapters to type
 	return strings.Join(pages, "\n\n"), nil
 }
 
